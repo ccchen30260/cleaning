@@ -1306,12 +1306,13 @@
         }
 
         // --- Modals Logic: Action ---
-        function openActionModal(machineId, type) {
+        function openActionModal(machineId, type, date) {
             const m = machines.find(mac => mac.id === machineId);
             if(!m) return;
 
             document.getElementById('action-machine-id').value = m.id;
             document.getElementById('action-type').value = type;
+            document.getElementById('action-date').value = date;
             document.getElementById('action-machine-name').value = `${m.name} (${m.type})`;
             document.getElementById('action-notes').value = '';
 
@@ -1350,6 +1351,7 @@
         async function executeActionComplete() {
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
+            const actionDate = document.getElementById('action-date').value; // 取得點擊的那一天
             const date = getToday(); 
             const batchNo = document.getElementById('action-batch-no').value;
             const notes = document.getElementById('action-notes').value;
@@ -1359,11 +1361,12 @@
             const mIndex = machines.findIndex(m => m.id === machineId);
             if (mIndex > -1) {
                 if (type === 'clean') { 
-                    machines[mIndex].nextClean = ''; 
+                    // 僅移除完成的該日排程，保留其他天的排程
+                    machines[mIndex].nextClean = (machines[mIndex].nextClean || []).filter(d => d !== actionDate);
                     machines[mIndex].batchNo = batchNo; 
                 }
                 else { 
-                    machines[mIndex].nextMaint = ''; 
+                    machines[mIndex].nextMaint = (machines[mIndex].nextMaint || []).filter(d => d !== actionDate);
                 }
             }
 
@@ -1379,11 +1382,12 @@
         async function deleteSchedule() {
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
+            const actionDate = document.getElementById('action-date').value;
             const m = machines.find(mac => mac.id === machineId);
             
             if (m && confirm(`確定要刪除此${type === 'clean' ? '清潔' : '保養'}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
-                if (type === 'clean') m.nextClean = '';
-                else m.nextMaint = '';
+                if (type === 'clean') m.nextClean = (m.nextClean || []).filter(d => d !== actionDate);
+                else m.nextMaint = (m.nextMaint || []).filter(d => d !== actionDate);
                 
                 await saveData();
                 closeActionModal();
@@ -1401,7 +1405,7 @@
             const actionStr = type === 'maintain' ? '保養' : '清潔';
             const colorClass = type === 'maintain' ? 'text-orange-600' : 'text-teal-600';
             
-            document.getElementById('reschedule-text').innerHTML = `確定要將「<span class="font-bold text-gray-800">${m.name}</span>」的<span class="${colorClass} font-bold">${actionStr}排程</span>調整至 <br><span class="font-bold text-lg mt-2 inline-block">${date}</span> 嗎？`;
+            document.getElementById('reschedule-text').innerHTML = `確定要為「<span class="font-bold text-gray-800">${m.name}</span>」<span class="${colorClass} font-bold">新增${actionStr}排程</span>於 <br><span class="font-bold text-lg mt-2 inline-block">${date}</span> 嗎？`;
             document.getElementById('reschedule-modal').classList.remove('hidden');
         }
 
@@ -1411,19 +1415,23 @@
             if (!rescheduleTarget) return;
             const m = machines.find(mac => mac.id === rescheduleTarget.machineId);
             if (m) {
-                if (rescheduleTarget.type === 'maintain' && m.nextClean === rescheduleTarget.date) {
+                if (rescheduleTarget.type === 'maintain' && (m.nextClean || []).includes(rescheduleTarget.date)) {
                     showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
                     closeRescheduleModal();
                     return;
                 }
-                if (rescheduleTarget.type === 'clean' && m.nextMaint === rescheduleTarget.date) {
+                if (rescheduleTarget.type === 'clean' && (m.nextMaint || []).includes(rescheduleTarget.date)) {
                     showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
                     closeRescheduleModal();
                     return;
                 }
 
-                if (rescheduleTarget.type === 'maintain') m.nextMaint = rescheduleTarget.date;
-                else m.nextClean = rescheduleTarget.date;
+                // 新增日期至排程陣列
+                if (rescheduleTarget.type === 'maintain') {
+                    if (!m.nextMaint.includes(rescheduleTarget.date)) m.nextMaint.push(rescheduleTarget.date);
+                } else {
+                    if (!m.nextClean.includes(rescheduleTarget.date)) m.nextClean.push(rescheduleTarget.date);
+                }
                 
                 await saveData();
                 showToast(`排程已成功調整至 ${rescheduleTarget.date}`, 'success');
@@ -1448,11 +1456,15 @@
                 
                 machines.forEach(m => {
                     if (filterType !== 'all' && m.type !== filterType) return;
-                    const targetDate = isMaintain ? m.nextMaint : m.nextClean;
-                    if (weekDays.includes(targetDate)) {
-                        if (isMaintain) m.nextMaint = '';
-                        else m.nextClean = '';
-                        clearedCount++;
+                    
+                    if (isMaintain) {
+                        const originalLength = (m.nextMaint || []).length;
+                        m.nextMaint = (m.nextMaint || []).filter(d => !weekDays.includes(d));
+                        if (originalLength !== m.nextMaint.length) clearedCount++;
+                    } else {
+                        const originalLength = (m.nextClean || []).length;
+                        m.nextClean = (m.nextClean || []).filter(d => !weekDays.includes(d));
+                        if (originalLength !== m.nextClean.length) clearedCount++;
                     }
                 });
                 
