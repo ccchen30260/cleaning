@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機台保養與清潔管理系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { @apply text-blue-600 border-b-2 border-blue-600 font-semibold; }
+        .tab-inactive { @apply text-gray-500 hover:text-gray-700; }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        /* Toast Animation */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .toast-enter { animation: slideInRight 0.3s ease-out forwards; }
+        .toast-leave { animation: fadeOut 0.3s ease-out forwards; }
+        
+        /* 系統載入遮罩 */
+        #loading-overlay {
+            transition: opacity 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex overflow-hidden">
+
+    <!-- System Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mb-4"></div>
+        <h2 class="text-xl font-bold text-gray-700" id="loading-text">系統初始化中...</h2>
+        <p class="text-sm text-gray-500 mt-2">正在同步雲端資料，請稍候</p>
+    </div>
+
+    <!-- Login View Overlay -->
+    <div id="login-view" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-[100] hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-gray-100">
+            <div class="flex justify-center mb-6">
+                <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+            </div>
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">系統登入</h2>
+            <form onsubmit="doLogin(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">登入身分</label>
+                    <select id="login-role" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="admin">管理者 (Admin)</option>
+                        <option value="viewer">檢視者 (Viewer)</option>
+                    </select>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">密碼</label>
+                    <input type="password" id="login-pwd" required placeholder="請輸入密碼 (預設: 0000)" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-sm">
+                    登入
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r shadow-sm flex flex-col hidden md:flex z-40">
+        <div class="h-16 flex items-center px-6 border-b">
+            <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <h1 class="text-lg font-bold text-gray-800">機台維管系統</h1>
+        </div>
+        <nav class="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center px-4 py-3 rounded-xl bg-blue-50 text-blue-700 font-medium transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                儀表板
+            </button>
+            <button onclick="switchTab('maintenance')" id="nav-maintenance" class="w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+                保養排程管理
+            </button>
+            <button onclick="switchTab('cleaning')" id="nav-cleaning" class="w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+                清潔排程管理
+            </button>
+            <button onclick="switchTab('logs')" id="nav-logs" class="w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                作業紀錄查詢
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="admin-only hidden w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                基礎資料管理
+            </button>
+        </nav>
+        <div class="p-4 border-t border-gray-200">
+            <div class="mb-3 px-4 text-xs font-bold text-gray-500" id="current-user-display">未登入</div>
+            <button onclick="openChangePwdModal()" class="admin-only hidden w-full flex items-center px-4 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors mb-1 text-sm font-medium">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                修改密碼
+            </button>
+            <button onclick="doLogout()" class="w-full flex items-center px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors text-sm font-medium">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                登出系統
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-gray-50">
+        <!-- Mobile Header -->
+        <header class="md:hidden bg-white h-16 border-b flex items-center justify-between px-4 overflow-x-auto">
+            <h1 class="text-lg font-bold text-gray-800 whitespace-nowrap mr-4">維管系統</h1>
+            <div class="flex space-x-2">
+                <button onclick="switchTab('dashboard')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">儀表板</button>
+                <button onclick="switchTab('maintenance')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">保養</button>
+                <button onclick="switchTab('cleaning')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">清潔</button>
+                <button onclick="switchTab('logs')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">紀錄</button>
+                <button onclick="switchTab('settings')" id="mob-nav-settings" class="admin-only hidden text-xs p-2 bg-gray-100 rounded whitespace-nowrap">設定</button>
+                <button onclick="openChangePwdModal()" class="admin-only hidden text-xs p-2 bg-gray-100 rounded whitespace-nowrap">密碼</button>
+                <button onclick="doLogout()" class="text-xs p-2 bg-red-50 text-red-600 rounded whitespace-nowrap">登出</button>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="flex-1 overflow-auto p-4 md:p-8">
+            
+            <!-- View: Dashboard -->
+            <div id="view-dashboard" class="space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">系統儀表板</h2>
+                
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-sm text-gray-500 font-medium mb-1">總機台數</div>
+                        <div class="text-3xl font-bold text-gray-800" id="stat-total-machines">0</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-sm text-gray-500 font-medium mb-1">即將/逾期 保養數</div>
+                        <div class="text-3xl font-bold text-orange-600" id="stat-urgent-maint">0</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-sm text-gray-500 font-medium mb-1">即將/逾期 清潔數</div>
+                        <div class="text-3xl font-bold text-teal-600" id="stat-urgent-clean">0</div>
+                    </div>
+                </div>
+
+                <!-- Upcoming Tasks (Today, Tomorrow, Day After) -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">近期待辦作業</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="dashboard-upcoming-tasks">
+                        <!-- JS Injection -->
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">機台狀態分佈</h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">本月作業次數統計</h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="activityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Basic Settings (Types & Machines) -->
+            <div id="view-settings" class="hidden space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">基礎資料管理</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Types Management -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col max-h-[600px]">
+                        <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                            <h3 class="text-lg font-bold text-gray-800">機台類型管理</h3>
+                            <button onclick="openTypeModal()" class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-4 py-2 rounded-lg text-sm font-bold transition-colors">新增類型</button>
+                        </div>
+                        <div class="p-0 overflow-auto flex-1">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-white border-b sticky top-0 shadow-sm">
+                                    <tr>
+                                        <th class="px-6 py-3 text-gray-600 font-medium">類型名稱</th>
+                                        <th class="px-6 py-3 w-32 text-center text-gray-600 font-medium">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settings-types-tbody" class="divide-y divide-gray-100">
+                                    <!-- JS Injection -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Machines Management -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col max-h-[600px]">
+                        <div class="p-4 border-b bg-gray-50 rounded-t-2xl">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-lg font-bold text-gray-800">機台資料維護</h3>
+                                <button onclick="openMachineSettingModal()" class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-4 py-2 rounded-lg text-sm font-bold transition-colors">新增機台</button>
+                            </div>
+                            <div>
+                                <select id="settings-machine-type-filter" onchange="renderSettings()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <option value="all">過濾類型: 全部</option>
+                                    <!-- JS Injection -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="p-0 overflow-auto flex-1">
+                            <table class="w-full text-left text-sm whitespace-nowrap">
+                                <thead class="bg-white border-b sticky top-0 shadow-sm">
+                                    <tr>
+                                        <th class="px-6 py-3 text-gray-600 font-medium">類型</th>
+                                        <th class="px-6 py-3 text-gray-600 font-medium">機台</th>
+                                        <th class="px-6 py-3 w-32 text-center text-gray-600 font-medium">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settings-machines-tbody" class="divide-y divide-gray-100">
+                                    <!-- JS Injection -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Maintenance -->
+            <div id="view-maintenance" class="hidden space-y-4">
+                <h2 class="text-2xl font-bold text-gray-800">保養排程管理 (每週預排)</h2>
+                
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <div class="flex items-center space-x-3 w-full md:w-auto">
+                        <label class="text-sm font-medium text-gray-600 whitespace-nowrap">顯示類型:</label>
+                        <select id="maint-type-filter" onchange="renderMaintenance()" class="w-full md:w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <option value="all">所有類型</option>
+                            <!-- JS Injection -->
+                        </select>
+                    </div>
+                    
+                    <div class="flex space-x-2 items-center flex-wrap gap-y-2">
+                        <button onclick="togglePending('maintain')" id="toggle-pending-maint" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-sm font-bold shadow-sm transition-colors mr-2">顯示待保養</button>
+                        <button onclick="clearCurrentWeek('maintain')" class="admin-only hidden px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-bold shadow-sm transition-colors mr-2">一鍵清除</button>
+                        <button onclick="changeWeek('maintain', -1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">&lt; 上週</button>
+                        <span id="maint-week-label" class="font-bold text-gray-700 px-2 text-sm md:text-base"></span>
+                        <button onclick="changeWeek('maintain', 1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">下週 &gt;</button>
+                        <button onclick="changeWeek('maintain', 0)" class="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 text-sm ml-2 font-bold">本週</button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[800px]">
+                            <thead class="bg-gray-50 text-gray-600 font-medium border-b" id="maintenance-thead">
+                                <!-- JS Injection -->
+                            </thead>
+                            <tbody id="maintenance-tbody" class="divide-y divide-gray-100 text-gray-700">
+                                <!-- JS Injection -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="admin-only hidden p-3 bg-orange-50/50 border-t text-xs text-orange-800 font-medium">
+                        💡 提示：點擊有顏色的「預排區塊」可執行保養作業；點擊「空白日期欄位」則可將該機台的保養排程直接調整至該日。
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Cleaning -->
+            <div id="view-cleaning" class="hidden space-y-4">
+                <h2 class="text-2xl font-bold text-gray-800">清潔排程管理 (每週預排)</h2>
+                
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <div class="flex items-center space-x-3 w-full md:w-auto">
+                        <label class="text-sm font-medium text-gray-600 whitespace-nowrap">顯示類型:</label>
+                        <select id="clean-type-filter" onchange="renderCleaning()" class="w-full md:w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="all">所有類型</option>
+                            <!-- JS Injection -->
+                        </select>
+                    </div>
+
+                    <div class="flex space-x-2 items-center flex-wrap gap-y-2">
+                        <button onclick="togglePending('clean')" id="toggle-pending-clean" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-sm font-bold shadow-sm transition-colors mr-2">顯示待清潔</button>
+                        <button onclick="clearCurrentWeek('clean')" class="admin-only hidden px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-bold shadow-sm transition-colors mr-2">一鍵清除</button>
+                        <button onclick="changeWeek('clean', -1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">&lt; 上週</button>
+                        <span id="clean-week-label" class="font-bold text-gray-700 px-2 text-sm md:text-base"></span>
+                        <button onclick="changeWeek('clean', 1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">下週 &gt;</button>
+                        <button onclick="changeWeek('clean', 0)" class="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 text-sm ml-2 font-bold">本週</button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[800px]">
+                            <thead class="bg-gray-50 text-gray-600 font-medium border-b" id="cleaning-thead">
+                                <!-- JS Injection -->
+                            </thead>
+                            <tbody id="cleaning-tbody" class="divide-y divide-gray-100 text-gray-700">
+                                <!-- JS Injection -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="admin-only hidden p-3 bg-teal-50/50 border-t text-xs text-teal-800 font-medium">
+                        💡 提示：點擊有顏色的「預排區塊」可執行清潔作業；點擊「空白日期欄位」則可將該機台的清潔排程直接調整至該日。
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Logs -->
+            <div id="view-logs" class="hidden space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">作業紀錄查詢</h2>
+                
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-end">
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">機台類型</label>
+                        <select id="filter-log-type" onchange="updateLogMachineFilter()" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">所有類型</option>
+                            <!-- JS Injection -->
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">機台</label>
+                        <select id="filter-log-machine" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">所有機台</option>
+                            <!-- JS Injection -->
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">作業類型</label>
+                        <select id="filter-log-action" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">全部</option>
+                            <option value="maintain">保養</option>
+                            <option value="clean">清潔</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">時間範圍</label>
+                        <select id="filter-log-time-mode" onchange="toggleTimeFilterMode()" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">全部時間</option>
+                            <option value="range">日期區間</option>
+                            <option value="month">指定年月</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Date Range Inputs -->
+                    <div id="filter-log-range-group" class="hidden flex-1 min-w-[280px] flex space-x-2">
+                        <div class="w-1/2">
+                            <label class="block text-sm font-medium text-gray-600 mb-1">起始日期</label>
+                            <input type="date" id="filter-log-start-date" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="w-1/2">
+                            <label class="block text-sm font-medium text-gray-600 mb-1">結束日期</label>
+                            <input type="date" id="filter-log-end-date" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    
+                    <!-- Year/Month Input -->
+                    <div id="filter-log-month-group" class="hidden flex-1 min-w-[150px]">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">選擇年月</label>
+                        <input type="month" id="filter-log-month" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <button onclick="renderLogs()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm whitespace-nowrap">
+                        查詢
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-gray-50 text-gray-600 font-medium border-b">
+                                <tr>
+                                    <th class="px-6 py-4">日期</th>
+                                    <th class="px-6 py-4">類型</th>
+                                    <th class="px-6 py-4">機台</th>
+                                    <th class="px-6 py-4">作業</th>
+                                    <th class="px-6 py-4">清潔後起始批號</th>
+                                    <th class="px-6 py-4">備註</th>
+                                    <th class="px-6 py-4 admin-only hidden">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body" class="divide-y divide-gray-100 text-gray-700">
+                                <!-- JS Injection -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modals -->
+
+    <!-- Modal: Type Setting -->
+    <div id="type-modal" class="fixed inset-0 bg-black/40 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 id="type-modal-title" class="text-lg font-bold text-gray-800">新增類型</h3>
+                <button onclick="closeTypeModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <form onsubmit="saveType(event)">
+                    <input type="hidden" id="setting-type-old-name">
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">類型名稱 <span class="text-red-500">*</span></label>
+                        <input type="text" id="setting-type-name" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeTypeModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium">取消</button>
+                        <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Machine Setting -->
+    <div id="machine-setting-modal" class="fixed inset-0 bg-black/40 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 id="machine-setting-title" class="text-lg font-bold text-gray-800">新增機台</h3>
+                <button onclick="closeMachineSettingModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <form onsubmit="saveMachine(event)">
+                    <input type="hidden" id="setting-machine-id">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">所屬類型 <span class="text-red-500">*</span></label>
+                        <select id="setting-machine-type" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                            <!-- JS Injection -->
+                        </select>
+                    </div>
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">機台名稱 <span class="text-red-500">*</span></label>
+                        <input type="text" id="setting-machine-name" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeMachineSettingModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium">取消</button>
+                        <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Action (Clean / Maintain) -->
+    <div id="action-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 id="action-modal-title" class="text-lg font-bold text-gray-800">執行作業</h3>
+                <button onclick="closeActionModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <form id="action-form" onsubmit="submitAction(event)">
+                    <input type="hidden" id="action-machine-id">
+                    <input type="hidden" id="action-type">
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">機台 (類型)</label>
+                        <input type="text" id="action-machine-name" readonly class="w-full border border-gray-200 bg-gray-50 rounded-lg px-4 py-2 text-gray-600 cursor-not-allowed">
+                    </div>
+                    
+                    <!-- Only shown for cleaning -->
+                    <div id="batch-input-group" class="mb-4 hidden">
+                        <label class="block text-sm font-bold text-teal-700 mb-1">設定清潔後起始批號 <span class="text-red-500">*</span></label>
+                        <input type="text" id="action-batch-no" placeholder="例如: BATCH-1002" class="w-full border border-teal-300 bg-teal-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-teal-500 outline-none">
+                        <p class="text-xs text-gray-500 mt-1">清潔完成後，該機台將從此批號開始計算。</p>
+                    </div>
+
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">備註說明</label>
+                        <textarea id="action-notes" rows="2" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="選填"></textarea>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <button type="button" onclick="deleteSchedule()" class="px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 font-medium transition-colors">刪除預排</button>
+                        <div class="flex space-x-3">
+                            <button type="button" onclick="closeActionModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium transition-colors">取消</button>
+                            <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors">確認儲存</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Confirm Reschedule -->
+    <div id="reschedule-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col p-6 text-center">
+            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">調整排程確認</h3>
+            <p id="reschedule-text" class="text-sm text-gray-600 mb-6">確定要調整排程嗎？</p>
+            <div class="flex justify-center space-x-3">
+                <button onclick="closeRescheduleModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium transition-colors">取消</button>
+                <button onclick="executeReschedule()" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors">確認調整</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Confirm Action Complete -->
+    <div id="confirm-action-modal" class="fixed inset-0 bg-black/40 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col p-6 text-center">
+            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2" id="confirm-action-title">保養完成</h3>
+            <p class="text-sm text-gray-600 mb-6">是否確認已完成並將此作業記錄至系統中？</p>
+            <div class="flex justify-center space-x-3">
+                <button onclick="closeConfirmActionModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium transition-colors w-24">否</button>
+                <button onclick="executeActionComplete()" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors w-24">是</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Log -->
+    <div id="edit-log-modal" class="fixed inset-0 bg-black/40 z-[70] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800">修改作業紀錄</h3>
+                <button onclick="closeEditLogModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <form onsubmit="saveEditedLog(event)">
+                    <input type="hidden" id="edit-log-id">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">作業日期 <span class="text-red-500">*</span></label>
+                        <input type="date" id="edit-log-date" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div id="edit-log-batch-group" class="mb-4 hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">清潔後起始批號</label>
+                        <input type="text" id="edit-log-batch" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">備註說明</label>
+                        <textarea id="edit-log-notes" rows="3" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeEditLogModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium">取消</button>
+                        <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Change Password -->
+    <div id="change-pwd-modal" class="fixed inset-0 bg-black/40 z-[80] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800">修改登入密碼</h3>
+                <button onclick="closeChangePwdModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <form onsubmit="saveNewPwd(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">選擇修改對象</label>
+                        <select id="pwd-role-select" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="admin">管理者 (Admin)</option>
+                            <option value="viewer">檢視者 (Viewer)</option>
+                        </select>
+                    </div>
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">新密碼 <span class="text-red-500">*</span></label>
+                        <input type="text" id="new-pwd" required placeholder="請輸入新密碼" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeChangePwdModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium">取消</button>
+                        <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-2"></div>
+
+    <script>
+        // ==========================================
+        // 💡 雲端資料庫設定區塊 (Supabase)
+        // ==========================================
+        const SUPABASE_URL = ''; // ★ 請填入您的 Supabase URL (例如: 'https://xxxxxx.supabase.co')
+        const SUPABASE_ANON_KEY = ''; // ★ 請填入您的 Supabase Anon Key
+
+        let supabaseClient = null;
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        // ==========================================
+        // --- Utility Functions ---
+        // ==========================================
+        function generateId() { return 'id-' + Date.now().toString(36) + Math.random().toString(36).substring(2); }
+        function getToday() { return new Date().toISOString().split('T')[0]; }
+        function getOffsetDate(days) {
+            const d = new Date();
+            d.setDate(d.getDate() + days);
+            return d.toISOString().split('T')[0];
+        }
+        function getMonday(d) {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(date.setDate(diff));
+        }
+        function getWeekDays(startMonday) {
+            let days = [];
+            for (let i = 0; i < 7; i++) {
+                let d = new Date(startMonday);
+                d.setDate(d.getDate() + i);
+                days.push(d.toISOString().split('T')[0]);
+            }
+            return days;
+        }
+        function formatDayHeader(dateStr) {
+            const daysArr = ['日','一','二','三','四','五','六'];
+            const d = new Date(dateStr);
+            return `${d.getMonth() + 1}/${d.getDate()} (週${daysArr[d.getDay()]})`;
+        }
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-teal-500' : (type === 'error' ? 'bg-red-500' : 'bg-blue-500');
+            toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg flex items-center min-w-[250px]`;
+            toast.innerHTML = `<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'}</svg><span class="font-medium">${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.classList.replace('toast-enter', 'toast-leave'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        // ==========================================
+        // --- State Management ---
+        // ==========================================
+        const DEFAULT_TYPES = ['Kaido', '先導', '羅得', '覆捲', '烘箱'];
+        const DEFAULT_MACHINES = [
+            ...['W32','W33','W34','W35','W36','W37','W38','W39'].map((n,i)=>({ id: generateId()+i+'k', type: 'Kaido', name: n, nextMaint: getOffsetDate(7), nextClean: getOffsetDate(2), batchNo: '' })),
+            ...['W42','W43','W44'].map((n,i)=>({ id: generateId()+i+'x', type: '先導', name: n, nextMaint: getOffsetDate(14), nextClean: getOffsetDate(5), batchNo: '' })),
+            ...['W31','W40'].map((n,i)=>({ id: generateId()+i+'y', type: '羅得', name: n, nextMaint: getOffsetDate(3), nextClean: getOffsetDate(1), batchNo: '' })),
+            ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: getOffsetDate(30), nextClean: getOffsetDate(7), batchNo: '' })),
+        ];
+
+        let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
+        let machines = JSON.parse(localStorage.getItem('sys_machines')) || DEFAULT_MACHINES;
+        let logs = JSON.parse(localStorage.getItem('sys_logs')) || [];
+        let sysPwds = JSON.parse(localStorage.getItem('sys_pwds')) || { admin: '0000', viewer: '0000' };
+        
+        let currentRole = null;
+        let charts = { status: null, activity: null };
+        let currentMaintWeek = getMonday(new Date());
+        let currentCleanWeek = getMonday(new Date());
+        let rescheduleTarget = null;
+        let showOnlyPendingMaint = false;
+        let showOnlyPendingClean = false;
+
+        // 雲端資料庫載入
+        async function loadDataFromCloud() {
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('app_state').select('data').eq('id', 1).single();
+                    if (data && data.data) {
+                        const db = data.data;
+                        machineTypes = db.types || DEFAULT_TYPES;
+                        machines = db.machines || DEFAULT_MACHINES;
+                        logs = db.logs || [];
+                        sysPwds = db.pwds || { admin: '0000', viewer: '0000' };
+                        
+                        // 覆寫回本機，確保斷線時也有最新資料
+                        localStorage.setItem('sys_types', JSON.stringify(machineTypes));
+                        localStorage.setItem('sys_machines', JSON.stringify(machines));
+                        localStorage.setItem('sys_logs', JSON.stringify(logs));
+                        localStorage.setItem('sys_pwds', JSON.stringify(sysPwds));
+                    } else if (error && error.code === 'PGRST116') {
+                        // 找不到資料 (第一次執行)，將目前的預設值推上雲端
+                        await saveData();
+                    }
+                } catch (err) {
+                    console.error("雲端資料讀取失敗，使用本機資料", err);
+                    showToast('雲端讀取失敗，已切換至單機模式', 'error');
+                }
+            }
+        }
+
+        // 儲存資料 (雙向同步：存本機 + 傳雲端)
+        async function saveData() {
+            // 儲存至本機
+            localStorage.setItem('sys_types', JSON.stringify(machineTypes));
+            localStorage.setItem('sys_machines', JSON.stringify(machines));
+            localStorage.setItem('sys_logs', JSON.stringify(logs));
+            localStorage.setItem('sys_pwds', JSON.stringify(sysPwds));
+
+            // 儲存至雲端
+            if (supabaseClient) {
+                const payload = { types: machineTypes, machines: machines, logs: logs, pwds: sysPwds };
+                try {
+                    const { error } = await supabaseClient.from('app_state').upsert({ id: 1, data: payload });
+                    if (error) throw error;
+                } catch(e) {
+                    console.error("Supabase 同步失敗", e);
+                    showToast('雲端同步失敗，已儲存於本機', 'error');
+                }
+            }
+        }
+
+        function populateGlobalTypeFilters() {
+            const filters = ['maint-type-filter', 'clean-type-filter', 'filter-log-type', 'settings-machine-type-filter'];
+            filters.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const current = el.value;
+                let html = '<option value="all">所有類型</option>';
+                machineTypes.forEach(t => html += `<option value="${t}">${t}</option>`);
+                el.innerHTML = html;
+                if (machineTypes.includes(current) || current === 'all') el.value = current;
+                else el.value = 'all';
+            });
+            updateLogMachineFilter(); // specific link
+        }
+
+        // --- Navigation ---
+        function switchTab(tabId) {
+            document.querySelectorAll('main > div > div[id^="view-"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.classList.remove('bg-blue-50', 'text-blue-700', 'font-medium');
+                btn.classList.add('text-gray-600');
+            });
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            if(activeBtn) {
+                activeBtn.classList.remove('text-gray-600');
+                activeBtn.classList.add('bg-blue-50', 'text-blue-700', 'font-medium');
+            }
+
+            if(tabId === 'dashboard') renderDashboard();
+            if(tabId === 'settings') renderSettings();
+            if(tabId === 'maintenance') renderMaintenance();
+            if(tabId === 'cleaning') renderCleaning();
+            if(tabId === 'logs') {
+                populateGlobalTypeFilters();
+                renderLogs();
+            }
+        }
+
+        // --- Render: Dashboard ---
+        function renderDashboard() {
+            document.getElementById('stat-total-machines').textContent = machines.length;
+            
+            const today = getToday();
+            let urgentMaint = 0, urgentClean = 0, normalCount = 0;
+
+            machines.forEach(m => {
+                let mDanger = false, cDanger = false;
+                if (m.nextMaint && m.nextMaint <= today) { urgentMaint++; mDanger = true; }
+                if (m.nextClean && m.nextClean <= today) { urgentClean++; cDanger = true; }
+                if (!mDanger && !cDanger) normalCount++;
+            });
+
+            document.getElementById('stat-urgent-maint').textContent = urgentMaint;
+            document.getElementById('stat-urgent-clean').textContent = urgentClean;
+
+            if (charts.status) charts.status.destroy();
+            const ctxStatus = document.getElementById('statusChart').getContext('2d');
+            charts.status = new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: ['正常', '需保養', '需清潔'],
+                    datasets: [{ data: [normalCount, urgentMaint, urgentClean], backgroundColor: ['#10B981', '#F97316', '#14B8A6'], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
+            });
+
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const recentLogs = logs.filter(l => new Date(l.date) >= thirtyDaysAgo);
+            const counts = {};
+            machines.forEach(m => { counts[m.name] = { maint: 0, clean: 0 }; });
+            
+            recentLogs.forEach(l => {
+                const m = machines.find(mac => mac.id === l.machineId);
+                if(m && counts[m.name]) {
+                    if(l.type === 'maintain') counts[m.name].maint++;
+                    if(l.type === 'clean') counts[m.name].clean++;
+                }
+            });
+
+            const labels = Object.keys(counts);
+            const maintData = labels.map(l => counts[l].maint);
+            const cleanData = labels.map(l => counts[l].clean);
+
+            if (charts.activity) charts.activity.destroy();
+            const ctxAct = document.getElementById('activityChart').getContext('2d');
+            charts.activity = new Chart(ctxAct, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: '保養次數', data: maintData, backgroundColor: '#3B82F6', borderRadius: 4 },
+                        { label: '清潔次數', data: cleanData, backgroundColor: '#14B8A6', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+
+            // 處理今天/明天/後天待辦
+            const tomorrow = getOffsetDate(1);
+            const dayAfterTomorrow = getOffsetDate(2);
+
+            const upcomingData = {
+                today: { date: today, label: '今天', maint: [], clean: [] },
+                tomorrow: { date: tomorrow, label: '明天', maint: [], clean: [] },
+                dayAfter: { date: dayAfterTomorrow, label: '後天', maint: [], clean: [] }
+            };
+
+            machines.forEach(m => {
+                // 檢查保養
+                if (m.nextMaint === today) upcomingData.today.maint.push(m);
+                else if (m.nextMaint === tomorrow) upcomingData.tomorrow.maint.push(m);
+                else if (m.nextMaint === dayAfterTomorrow) upcomingData.dayAfter.maint.push(m);
+
+                // 檢查清潔
+                if (m.nextClean === today) upcomingData.today.clean.push(m);
+                else if (m.nextClean === tomorrow) upcomingData.tomorrow.clean.push(m);
+                else if (m.nextClean === dayAfterTomorrow) upcomingData.dayAfter.clean.push(m);
+            });
+
+            let upcomingHTML = '';
+            ['today', 'tomorrow', 'dayAfter'].forEach(key => {
+                const d = upcomingData[key];
+                upcomingHTML += `
+                    <div class="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                        <h4 class="font-bold text-gray-700 mb-3 flex items-center justify-between border-b pb-2">
+                            ${d.label} <span class="text-xs text-gray-500 font-normal">${d.date}</span>
+                        </h4>
+                        <div class="space-y-3">
+                `;
+                
+                let hasTask = false;
+                
+                if (d.maint.length > 0) {
+                    hasTask = true;
+                    upcomingHTML += `<div class="text-sm"><div class="font-semibold text-orange-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-orange-500 mr-2"></span>待保養</div><div class="flex flex-wrap gap-1">`;
+                    d.maint.forEach(m => {
+                        upcomingHTML += `<span class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs border border-orange-200 font-medium">${m.name}</span>`;
+                    });
+                    upcomingHTML += `</div></div>`;
+                }
+
+                if (d.clean.length > 0) {
+                    hasTask = true;
+                    upcomingHTML += `<div class="text-sm"><div class="font-semibold text-teal-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-teal-500 mr-2"></span>待清潔</div><div class="flex flex-wrap gap-1">`;
+                    d.clean.forEach(m => {
+                        upcomingHTML += `<span class="bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs border border-teal-200 font-medium">${m.name}</span>`;
+                    });
+                    upcomingHTML += `</div></div>`;
+                }
+
+                if (!hasTask) {
+                    upcomingHTML += `<div class="text-sm text-gray-400 text-center py-4">無排定作業</div>`;
+                }
+
+                upcomingHTML += `</div></div>`;
+            });
+
+            document.getElementById('dashboard-upcoming-tasks').innerHTML = upcomingHTML;
+        }
+
+        // --- Render: Settings (CRUD) ---
+        function renderSettings() {
+            // Types Table
+            const typeTbody = document.getElementById('settings-types-tbody');
+            typeTbody.innerHTML = '';
+            machineTypes.forEach(t => {
+                typeTbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-3 font-medium text-gray-800">${t}</td>
+                        <td class="px-6 py-3 text-center space-x-2">
+                            <button onclick="openTypeModal('${t}')" class="text-blue-600 hover:text-blue-800 font-medium">編輯</button>
+                            <button onclick="deleteType('${t}')" class="text-red-600 hover:text-red-800 font-medium">刪除</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // Machines Table
+            const filterType = document.getElementById('settings-machine-type-filter').value;
+            const macTbody = document.getElementById('settings-machines-tbody');
+            macTbody.innerHTML = '';
+            
+            let filteredMacs = machines;
+            if (filterType !== 'all') filteredMacs = machines.filter(m => m.type === filterType);
+            
+            if(filteredMacs.length === 0) {
+                macTbody.innerHTML = `<tr><td colspan="3" class="text-center py-6 text-gray-500">無機台資料</td></tr>`;
+            }
+
+            filteredMacs.forEach(m => {
+                macTbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-3 text-gray-600">${m.type}</td>
+                        <td class="px-6 py-3 font-bold text-gray-800">${m.name}</td>
+                        <td class="px-6 py-3 text-center space-x-2">
+                            <button onclick="openMachineSettingModal('${m.id}')" class="text-blue-600 hover:text-blue-800 font-medium">編輯</button>
+                            <button onclick="deleteMachine('${m.id}')" class="text-red-600 hover:text-red-800 font-medium">刪除</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openTypeModal(typeName = '') {
+            document.getElementById('type-modal-title').textContent = typeName ? '編輯類型' : '新增類型';
+            document.getElementById('setting-type-old-name').value = typeName;
+            document.getElementById('setting-type-name').value = typeName;
+            document.getElementById('type-modal').classList.remove('hidden');
+        }
+
+        function closeTypeModal() {
+            document.getElementById('type-modal').classList.add('hidden');
+        }
+
+        async function saveType(e) {
+            e.preventDefault();
+            const oldName = document.getElementById('setting-type-old-name').value;
+            const newName = document.getElementById('setting-type-name').value.trim();
+            if (!newName) return;
+            
+            if (oldName) {
+                const idx = machineTypes.indexOf(oldName);
+                if (idx > -1) {
+                    machineTypes[idx] = newName;
+                    machines.forEach(m => { if (m.type === oldName) m.type = newName; });
+                }
+            } else {
+                if (!machineTypes.includes(newName)) machineTypes.push(newName);
+            }
+            await saveData();
+            closeTypeModal();
+            populateGlobalTypeFilters();
+            renderSettings();
+            showToast('類型已儲存');
+        }
+
+        async function deleteType(typeName) {
+            if(confirm(`確定要刪除類型「${typeName}」嗎？\n注意：這將同時刪除該類型下的所有機台與相關紀錄！`)) {
+                machineTypes = machineTypes.filter(t => t !== typeName);
+                const delIds = machines.filter(m => m.type === typeName).map(m => m.id);
+                machines = machines.filter(m => m.type !== typeName);
+                logs = logs.filter(l => !delIds.includes(l.machineId));
+                await saveData();
+                populateGlobalTypeFilters();
+                renderSettings();
+                showToast('類型與相關資料已刪除', 'error');
+            }
+        }
+
+        function openMachineSettingModal(id = '') {
+            document.getElementById('machine-setting-title').textContent = id ? '編輯機台' : '新增機台';
+            const typeSelect = document.getElementById('setting-machine-type');
+            typeSelect.innerHTML = machineTypes.map(t => `<option value="${t}">${t}</option>`).join('');
+            
+            if (id) {
+                const m = machines.find(mac => mac.id === id);
+                if(m) {
+                    document.getElementById('setting-machine-id').value = m.id;
+                    document.getElementById('setting-machine-type').value = m.type;
+                    document.getElementById('setting-machine-name').value = m.name;
+                }
+            } else {
+                document.getElementById('setting-machine-id').value = '';
+                document.getElementById('setting-machine-name').value = '';
+                // Default select filter type if not 'all'
+                const currentFilter = document.getElementById('settings-machine-type-filter').value;
+                if(currentFilter !== 'all') typeSelect.value = currentFilter;
+            }
+            document.getElementById('machine-setting-modal').classList.remove('hidden');
+        }
+
+        function closeMachineSettingModal() {
+            document.getElementById('machine-setting-modal').classList.add('hidden');
+        }
+
+        async function saveMachine(e) {
+            e.preventDefault();
+            const id = document.getElementById('setting-machine-id').value;
+            const type = document.getElementById('setting-machine-type').value;
+            const name = document.getElementById('setting-machine-name').value.trim();
+            
+            if (id) {
+                const m = machines.find(mac => mac.id === id);
+                if (m) { m.type = type; m.name = name; }
+            } else {
+                machines.push({ id: generateId(), type, name, nextMaint: getToday(), nextClean: getToday(), batchNo: '' });
+            }
+            await saveData();
+            closeMachineSettingModal();
+            renderSettings();
+            showToast('機台已儲存');
+        }
+
+        async function deleteMachine(id) {
+            const m = machines.find(mac => mac.id === id);
+            if(m && confirm(`確定要刪除機台「${m.name}」嗎？\n注意：這將同時刪除該機台的歷史紀錄！`)) {
+                machines = machines.filter(mac => mac.id !== id);
+                logs = logs.filter(l => l.machineId !== id);
+                await saveData();
+                renderSettings();
+                showToast('機台已刪除', 'error');
+            }
+        }
+
+        // --- Render: Schedule Views ---
+        function togglePending(type) {
+            if (type === 'maintain') {
+                showOnlyPendingMaint = !showOnlyPendingMaint;
+                document.getElementById('toggle-pending-maint').textContent = showOnlyPendingMaint ? '顯示全部機台' : '顯示待保養';
+                renderMaintenance();
+            } else {
+                showOnlyPendingClean = !showOnlyPendingClean;
+                document.getElementById('toggle-pending-clean').textContent = showOnlyPendingClean ? '顯示全部機台' : '顯示待清潔';
+                renderCleaning();
+            }
+        }
+
+        function changeWeek(type, offset) {
+            if (type === 'maintain') {
+                if (offset === 0) currentMaintWeek = getMonday(new Date());
+                else currentMaintWeek.setDate(currentMaintWeek.getDate() + (offset * 7));
+                renderMaintenance();
+            } else {
+                if (offset === 0) currentCleanWeek = getMonday(new Date());
+                else currentCleanWeek.setDate(currentCleanWeek.getDate() + (offset * 7));
+                renderCleaning();
+            }
+        }
+
+        function buildScheduleTable(tbodyId, theadId, weekStart, renderType) {
+            const weekDays = getWeekDays(weekStart);
+            const filterId = renderType === 'maintain' ? 'maint-type-filter' : 'clean-type-filter';
+            const filterType = document.getElementById(filterId).value;
+            
+            let displayMachines = machines;
+            if (filterType !== 'all') {
+                displayMachines = displayMachines.filter(m => m.type === filterType);
+            }
+
+            if (renderType === 'maintain' && showOnlyPendingMaint) {
+                displayMachines = displayMachines.filter(m => m.nextMaint && weekDays.includes(m.nextMaint));
+            }
+            if (renderType === 'clean' && showOnlyPendingClean) {
+                displayMachines = displayMachines.filter(m => m.nextClean && weekDays.includes(m.nextClean));
+            }
+
+            const thead = document.getElementById(theadId);
+            let thHTML = `<tr>
+                <th class="px-4 py-3 bg-gray-50 z-20 border-r shadow-[1px_0_0_#e5e7eb] sticky left-0" style="min-width: 90px; max-width: 120px;">類型</th>
+                <th class="px-4 py-3 bg-gray-50 z-20 border-r-2 border-gray-400 shadow-[2px_0_0_#9ca3af] sticky" style="min-width: 120px; left: 90px;">機台</th>
+            `;
+            weekDays.forEach(day => thHTML += `<th class="px-2 py-3 text-center min-w-[100px] border-b-0">${formatDayHeader(day)}</th>`);
+            thHTML += `</tr>`;
+            thead.innerHTML = thHTML;
+
+            const tbody = document.getElementById(tbodyId);
+            tbody.innerHTML = '';
+            
+            if (displayMachines.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-gray-500">無對應機台排程資料</td></tr>`;
+                return;
+            }
+
+            displayMachines.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+
+            displayMachines.forEach(m => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+                
+                let rowHTML = `
+                    <td class="px-4 py-3 align-middle border-b border-r bg-white sticky left-0 z-10 shadow-[1px_0_0_#e5e7eb]" style="min-width: 90px; max-width: 120px;">
+                        <span class="text-gray-700 font-bold text-sm bg-gray-100 px-2 py-1 rounded">${m.type}</span>
+                    </td>
+                    <td class="px-4 py-3 align-middle border-b border-r-2 border-gray-400 bg-white sticky z-10 shadow-[2px_0_0_#9ca3af]" style="min-width: 120px; left: 90px;">
+                        <div class="font-bold text-gray-800">${m.name}</div>
+                    </td>
+                `;
+
+                weekDays.forEach(day => {
+                    const isToday = day === getToday();
+                    const bgClass = isToday ? 'bg-blue-50/30' : '';
+                    const targetDate = renderType === 'maintain' ? m.nextMaint : m.nextClean;
+                    const actionFn = `openActionModal('${m.id}', '${renderType}')`;
+                    const isAdmin = currentRole === 'admin';
+                    
+                    if (targetDate === day) {
+                        const styleCls = renderType === 'maintain' 
+                            ? 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700'
+                            : 'bg-teal-100 hover:bg-teal-200 border-teal-200 text-teal-800';
+                        const text = renderType === 'maintain' ? '保養預排' : '清潔預排';
+
+                        const cursorCls = isAdmin ? 'cursor-pointer hover:scale-105 shadow-sm' : 'opacity-80';
+                        const clickAttr = isAdmin ? `onclick="${actionFn}"` : '';
+
+                        rowHTML += `
+                            <td class="border-b border-r p-2 text-center align-middle ${bgClass}">
+                                <div ${clickAttr} 
+                                     class="border rounded-lg py-3 px-1 text-sm font-bold transition-transform ${styleCls} ${cursorCls}"
+                                     title="${isAdmin ? '點擊填寫紀錄與設定下次排程' : '預定排程'}">
+                                    ${text}
+                                </div>
+                            </td>`;
+                    } else {
+                        const hoverCls = isAdmin ? 'group cursor-pointer hover:bg-gray-100 transition-colors' : '';
+                        const clickAttr = isAdmin ? `onclick="confirmReschedule('${m.id}', '${renderType}', '${day}')"` : '';
+
+                        rowHTML += `
+                            <td class="border-b border-r p-1 text-center align-middle ${bgClass} ${hoverCls}"
+                                ${clickAttr}>`;
+                        if (isAdmin) {
+                            rowHTML += `<div class="opacity-0 group-hover:opacity-100 text-gray-400 text-xs py-3 w-full h-full flex items-center justify-center">移至此日</div>`;
+                        }
+                        rowHTML += `</td>`;
+                    }
+                });
+                tr.innerHTML = rowHTML;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderMaintenance() {
+            const weekDays = getWeekDays(currentMaintWeek);
+            document.getElementById('maint-week-label').textContent = `${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')}`;
+            buildScheduleTable('maintenance-tbody', 'maintenance-thead', currentMaintWeek, 'maintain');
+        }
+
+        function renderCleaning() {
+            const weekDays = getWeekDays(currentCleanWeek);
+            document.getElementById('clean-week-label').textContent = `${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')}`;
+            buildScheduleTable('cleaning-tbody', 'cleaning-thead', currentCleanWeek, 'clean');
+        }
+
+        // --- Render: Logs ---
+        function updateLogMachineFilter() {
+            const typeFilter = document.getElementById('filter-log-type').value;
+            const machineSelect = document.getElementById('filter-log-machine');
+            const currentMac = machineSelect.value;
+            
+            machineSelect.innerHTML = '<option value="all">所有機台</option>';
+            
+            let filteredMacs = machines;
+            if (typeFilter !== 'all') filteredMacs = machines.filter(m => m.type === typeFilter);
+            
+            filteredMacs.forEach(m => {
+                machineSelect.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+            });
+
+            if (filteredMacs.find(m => m.id === currentMac)) machineSelect.value = currentMac;
+        }
+
+        function toggleTimeFilterMode() {
+            const mode = document.getElementById('filter-log-time-mode').value;
+            document.getElementById('filter-log-range-group').classList.toggle('hidden', mode !== 'range');
+            document.getElementById('filter-log-month-group').classList.toggle('hidden', mode !== 'month');
+        }
+
+        function renderLogs() {
+            const typeFilter = document.getElementById('filter-log-type').value;
+            const machineFilter = document.getElementById('filter-log-machine').value;
+            const actionFilter = document.getElementById('filter-log-action').value;
+            const timeMode = document.getElementById('filter-log-time-mode').value;
+            
+            let filtered = logs;
+            if (actionFilter !== 'all') filtered = filtered.filter(l => l.type === actionFilter);
+            
+            if (machineFilter !== 'all') {
+                filtered = filtered.filter(l => l.machineId === machineFilter);
+            } else if (typeFilter !== 'all') {
+                const validIds = machines.filter(m => m.type === typeFilter).map(m => m.id);
+                filtered = filtered.filter(l => validIds.includes(l.machineId));
+            }
+            
+            if (timeMode === 'range') {
+                const startDate = document.getElementById('filter-log-start-date').value;
+                const endDate = document.getElementById('filter-log-end-date').value;
+                if (startDate) filtered = filtered.filter(l => l.date >= startDate);
+                if (endDate) filtered = filtered.filter(l => l.date <= endDate);
+            } else if (timeMode === 'month') {
+                const monthVal = document.getElementById('filter-log-month').value;
+                if (monthVal) filtered = filtered.filter(l => l.date.startsWith(monthVal));
+            }
+
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date)); // desc
+
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = '';
+            
+            const isAdmin = currentRole === 'admin';
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}" class="text-center py-8 text-gray-500">尚無符合條件的紀錄</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(l => {
+                const m = machines.find(mac => mac.id === l.machineId);
+                const mName = m ? m.name : "已刪除機台";
+                const mType = m ? m.type : "-";
+                const typeLabel = l.type === 'maintain' 
+                    ? '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>' 
+                    : '<span class="text-teal-600 bg-teal-50 px-2 py-1 rounded font-medium">清潔</span>';
+                
+                let actionCol = '';
+                if (isAdmin) {
+                    actionCol = `
+                    <td class="px-6 py-4 space-x-2 admin-only">
+                        <button onclick="openEditLogModal(${l.id})" class="text-blue-600 hover:text-blue-800 font-medium">修改</button>
+                        <button onclick="deleteLog(${l.id})" class="text-red-600 hover:text-red-800 font-medium">刪除</button>
+                    </td>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">${l.date}</td>
+                        <td class="px-6 py-4 text-gray-500">${mType}</td>
+                        <td class="px-6 py-4 font-bold text-gray-800">${mName}</td>
+                        <td class="px-6 py-4">${typeLabel}</td>
+                        <td class="px-6 py-4 font-mono text-sm">${l.batchNo || '-'}</td>
+                        <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
+                        ${actionCol}
+                    </tr>
+                `;
+            });
+        }
+
+        async function deleteLog(logId) {
+            if(confirm('確定要刪除這筆作業紀錄嗎？')) {
+                logs = logs.filter(l => l.id !== logId);
+                await saveData();
+                renderLogs();
+                showToast('紀錄已刪除', 'error');
+            }
+        }
+
+        function openEditLogModal(logId) {
+            const log = logs.find(l => l.id === logId);
+            if(!log) return;
+            document.getElementById('edit-log-id').value = log.id;
+            document.getElementById('edit-log-date').value = log.date;
+            
+            const batchGroup = document.getElementById('edit-log-batch-group');
+            batchGroup.classList.remove('hidden');
+            document.getElementById('edit-log-batch').value = log.batchNo || '';
+            
+            document.getElementById('edit-log-notes').value = log.notes || '';
+            document.getElementById('edit-log-modal').classList.remove('hidden');
+        }
+
+        function closeEditLogModal() {
+            document.getElementById('edit-log-modal').classList.add('hidden');
+        }
+
+        async function saveEditedLog(e) {
+            e.preventDefault();
+            const logId = parseInt(document.getElementById('edit-log-id').value);
+            const log = logs.find(l => l.id === logId);
+            if(log) {
+                log.date = document.getElementById('edit-log-date').value;
+                log.batchNo = document.getElementById('edit-log-batch').value;
+                log.notes = document.getElementById('edit-log-notes').value;
+                await saveData();
+                renderLogs();
+                closeEditLogModal();
+                showToast('紀錄已成功修改');
+            }
+        }
+
+        // --- Modals Logic: Action ---
+        function openActionModal(machineId, type) {
+            const m = machines.find(mac => mac.id === machineId);
+            if(!m) return;
+
+            document.getElementById('action-machine-id').value = m.id;
+            document.getElementById('action-type').value = type;
+            document.getElementById('action-machine-name').value = `${m.name} (${m.type})`;
+            document.getElementById('action-notes').value = '';
+
+            const isClean = type === 'clean';
+            document.getElementById('action-modal-title').textContent = isClean ? '執行清潔作業' : '執行保養作業';
+            
+            const batchGroup = document.getElementById('batch-input-group');
+            const batchInput = document.getElementById('action-batch-no');
+            
+            if (isClean) {
+                batchGroup.classList.remove('hidden');
+                batchInput.required = true;
+                batchInput.value = ''; 
+            } else {
+                batchGroup.classList.add('hidden');
+                batchInput.required = false;
+            }
+
+            document.getElementById('action-modal').classList.remove('hidden');
+        }
+
+        function closeActionModal() { document.getElementById('action-modal').classList.add('hidden'); }
+
+        function submitAction(e) {
+            e.preventDefault();
+            const type = document.getElementById('action-type').value;
+            const isClean = type === 'clean';
+            document.getElementById('confirm-action-title').textContent = isClean ? '清潔完成' : '保養完成';
+            document.getElementById('confirm-action-modal').classList.remove('hidden');
+        }
+
+        function closeConfirmActionModal() {
+            document.getElementById('confirm-action-modal').classList.add('hidden');
+        }
+
+        async function executeActionComplete() {
+            const machineId = document.getElementById('action-machine-id').value;
+            const type = document.getElementById('action-type').value;
+            const date = getToday(); 
+            const batchNo = document.getElementById('action-batch-no').value;
+            const notes = document.getElementById('action-notes').value;
+
+            logs.push({ id: Date.now(), machineId, type, date, batchNo: type === 'clean' ? batchNo : '', notes });
+
+            const mIndex = machines.findIndex(m => m.id === machineId);
+            if (mIndex > -1) {
+                if (type === 'clean') { 
+                    machines[mIndex].nextClean = ''; 
+                    machines[mIndex].batchNo = batchNo; 
+                }
+                else { 
+                    machines[mIndex].nextMaint = ''; 
+                }
+            }
+
+            await saveData();
+            closeConfirmActionModal();
+            closeActionModal();
+            showToast(`${type === 'clean' ? '清潔' : '保養'}紀錄已成功儲存！`);
+            
+            if (!document.getElementById('view-maintenance').classList.contains('hidden')) renderMaintenance();
+            if (!document.getElementById('view-cleaning').classList.contains('hidden')) renderCleaning();
+        }
+
+        async function deleteSchedule() {
+            const machineId = document.getElementById('action-machine-id').value;
+            const type = document.getElementById('action-type').value;
+            const m = machines.find(mac => mac.id === machineId);
+            
+            if (m && confirm(`確定要刪除此${type === 'clean' ? '清潔' : '保養'}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
+                if (type === 'clean') m.nextClean = '';
+                else m.nextMaint = '';
+                
+                await saveData();
+                closeActionModal();
+                showToast('預排已刪除', 'success');
+                
+                if (!document.getElementById('view-maintenance').classList.contains('hidden')) renderMaintenance();
+                if (!document.getElementById('view-cleaning').classList.contains('hidden')) renderCleaning();
+            }
+        }
+
+        // --- Modals Logic: Reschedule ---
+        function confirmReschedule(machineId, type, date) {
+            rescheduleTarget = { machineId, type, date };
+            const m = machines.find(mac => mac.id === machineId);
+            const actionStr = type === 'maintain' ? '保養' : '清潔';
+            const colorClass = type === 'maintain' ? 'text-orange-600' : 'text-teal-600';
+            
+            document.getElementById('reschedule-text').innerHTML = `確定要將「<span class="font-bold text-gray-800">${m.name}</span>」的<span class="${colorClass} font-bold">${actionStr}排程</span>調整至 <br><span class="font-bold text-lg mt-2 inline-block">${date}</span> 嗎？`;
+            document.getElementById('reschedule-modal').classList.remove('hidden');
+        }
+
+        function closeRescheduleModal() { rescheduleTarget = null; document.getElementById('reschedule-modal').classList.add('hidden'); }
+
+        async function executeReschedule() {
+            if (!rescheduleTarget) return;
+            const m = machines.find(mac => mac.id === rescheduleTarget.machineId);
+            if (m) {
+                if (rescheduleTarget.type === 'maintain' && m.nextClean === rescheduleTarget.date) {
+                    showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
+                    closeRescheduleModal();
+                    return;
+                }
+                if (rescheduleTarget.type === 'clean' && m.nextMaint === rescheduleTarget.date) {
+                    showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
+                    closeRescheduleModal();
+                    return;
+                }
+
+                if (rescheduleTarget.type === 'maintain') m.nextMaint = rescheduleTarget.date;
+                else m.nextClean = rescheduleTarget.date;
+                
+                await saveData();
+                showToast(`排程已成功調整至 ${rescheduleTarget.date}`, 'success');
+                if (rescheduleTarget.type === 'maintain') renderMaintenance();
+                else renderCleaning();
+            }
+            closeRescheduleModal();
+        }
+
+        // --- Action: Clear Current Week ---
+        async function clearCurrentWeek(type) {
+            const isMaintain = type === 'maintain';
+            const actionStr = isMaintain ? '保養' : '清潔';
+            const filterId = isMaintain ? 'maint-type-filter' : 'clean-type-filter';
+            const filterType = document.getElementById(filterId).value;
+            
+            const weekStart = isMaintain ? currentMaintWeek : currentCleanWeek;
+            const weekDays = getWeekDays(weekStart);
+            
+            if (confirm(`確定要清除畫面上【當週 (${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')})】的所有${actionStr}預排嗎？\n(注意：只會清除目前篩選條件下顯示的預排)`)) {
+                let clearedCount = 0;
+                
+                machines.forEach(m => {
+                    if (filterType !== 'all' && m.type !== filterType) return;
+                    const targetDate = isMaintain ? m.nextMaint : m.nextClean;
+                    if (weekDays.includes(targetDate)) {
+                        if (isMaintain) m.nextMaint = '';
+                        else m.nextClean = '';
+                        clearedCount++;
+                    }
+                });
+                
+                if (clearedCount > 0) {
+                    await saveData();
+                    if (isMaintain) renderMaintenance();
+                    else renderCleaning();
+                    showToast(`已成功清除 ${clearedCount} 筆當週預排`, 'success');
+                } else {
+                    showToast(`當週畫面中無任何預排可清除`, 'error');
+                }
+            }
+        }
+
+        // --- Auth & Permissions ---
+        function doLogin(e) {
+            e.preventDefault();
+            const role = document.getElementById('login-role').value;
+            const pwd = document.getElementById('login-pwd').value;
+            if (pwd === sysPwds[role]) {
+                currentRole = role;
+                document.getElementById('login-view').classList.add('hidden');
+                document.getElementById('login-pwd').value = '';
+                applyPermissions();
+                showToast(`登入成功 (${role === 'admin' ? '管理者' : '檢視者'})`);
+            } else {
+                showToast('密碼錯誤', 'error');
+            }
+        }
+
+        function doLogout() {
+            currentRole = null;
+            document.getElementById('login-view').classList.remove('hidden');
+            document.getElementById('login-pwd').value = '';
+            showToast('已登出系統');
+        }
+
+        function openChangePwdModal() {
+            document.getElementById('new-pwd').value = '';
+            document.getElementById('change-pwd-modal').classList.remove('hidden');
+        }
+
+        function closeChangePwdModal() {
+            document.getElementById('change-pwd-modal').classList.add('hidden');
+        }
+
+        async function saveNewPwd(e) {
+            e.preventDefault();
+            const role = document.getElementById('pwd-role-select').value;
+            const newPwd = document.getElementById('new-pwd').value.trim();
+            if(newPwd) {
+                sysPwds[role] = newPwd;
+                await saveData();
+                closeChangePwdModal();
+                showToast(`${role === 'admin' ? '管理者' : '檢視者'}密碼已更新`);
+            }
+        }
+
+        function applyPermissions() {
+            const isAdmin = currentRole === 'admin';
+            
+            document.querySelectorAll('.admin-only').forEach(el => {
+                if (isAdmin) el.classList.remove('hidden');
+                else el.classList.add('hidden');
+            });
+            
+            document.getElementById('current-user-display').textContent = isAdmin ? '當前身分：管理者' : '當前身分：檢視者';
+            
+            if(!isAdmin && !document.getElementById('view-settings').classList.contains('hidden')) {
+                switchTab('dashboard'); 
+            } else {
+                renderMaintenance();
+                renderCleaning();
+                if (!document.getElementById('view-logs').classList.contains('hidden')) renderLogs();
+            }
+        }
+
+        // --- Init ---
+        window.onload = async () => {
+            // 如果有填寫 Supabase 網址，就先執行雲端載入
+            if (SUPABASE_URL) {
+                await loadDataFromCloud();
+            }
+            
+            // 移除 Loading 遮罩，顯示登入畫面
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.style.opacity = '0';
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden');
+                document.getElementById('login-view').classList.remove('hidden');
+            }, 300);
+
+            populateGlobalTypeFilters();
+            switchTab('dashboard');
+        };
+    </script>
+</body>
+</html>
