@@ -469,6 +469,7 @@
                 <form id="action-form" onsubmit="submitAction(event)">
                     <input type="hidden" id="action-machine-id">
                     <input type="hidden" id="action-type">
+                    <input type="hidden" id="action-date">
                     
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">機台 (類型)</label>
@@ -596,7 +597,7 @@
         // ==========================================
         // 💡 雲端資料庫設定區塊 (Supabase)
         // ==========================================
-        const SUPABASE_URL = 'https://dvkxthpsmflwgrxffgcx.supabase.co'; // ★ 請填入您的 Supabase URL (例如: 'https://xxxxxx.supabase.co')
+        const SUPABASE_URL = 'https://dvkxthpsmflwgrxffgcx.supabase.co'; // ★ 請填入您的 Supabase URL
         const SUPABASE_ANON_KEY = 'sb_publishable_xsZH3Ws0Td9Ko3HKRIIEzQ_0XMvgmPZ'; // ★ 請填入您的 Supabase Anon Key
 
         let supabaseClient = null;
@@ -655,7 +656,7 @@
             ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: [getOffsetDate(30)], nextClean: [getOffsetDate(7)], batchNo: '' })),
         ];
 
-        // 確保所有機台資料的排程都是「多日期陣列」格式
+        // 確保所有機台資料的排程都是「多日期陣列」格式 (強制防呆處理)
         function normalizeMachines(macs) {
             return macs.map(m => {
                 if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
@@ -663,12 +664,18 @@
                 return m;
             });
         }
+        
+        // 確保單一機台格式正確
+        function ensureArrays(m) {
+            if (!m) return;
+            if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
+            if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
+        }
 
         let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
         let machines = normalizeMachines(JSON.parse(localStorage.getItem('sys_machines')) || DEFAULT_MACHINES);
         let logs = JSON.parse(localStorage.getItem('sys_logs')) || [];
         
-        // 強化密碼庫的防呆，防止因 localStorage 回傳 {} 或 undefined 導致鎖死
         let sysPwds = null;
         try {
             sysPwds = JSON.parse(localStorage.getItem('sys_pwds'));
@@ -696,19 +703,18 @@
                         machines = normalizeMachines(db.machines || DEFAULT_MACHINES);
                         logs = db.logs || [];
                         
-                        // 同樣加上密碼防呆，確保雲端未包含密碼時不會覆寫成本地壞檔
                         const cloudPwds = db.pwds;
                         if (cloudPwds && typeof cloudPwds === 'object' && cloudPwds.admin) {
                             sysPwds = cloudPwds;
                         }
                         
-                        // 覆寫回本機，確保斷線時也有最新資料
+                        // 覆寫回本機
                         localStorage.setItem('sys_types', JSON.stringify(machineTypes));
                         localStorage.setItem('sys_machines', JSON.stringify(machines));
                         localStorage.setItem('sys_logs', JSON.stringify(logs));
                         localStorage.setItem('sys_pwds', JSON.stringify(sysPwds));
                     } else if (error && error.code === 'PGRST116') {
-                        // 找不到資料 (第一次執行)，將目前的預設值推上雲端
+                        // 初始化雲端
                         await saveData();
                     }
                 } catch (err) {
@@ -718,20 +724,20 @@
             }
         }
 
-        // 儲存資料 (雙向同步：存本機 + 傳雲端)
+        // 儲存資料
         async function saveData() {
-            // 防呆
             if (!sysPwds || typeof sysPwds !== 'object' || !sysPwds.admin) {
                 sysPwds = { admin: '0000', viewer: '0000' };
             }
+            
+            // 存檔前再次全體陣列防護
+            machines = normalizeMachines(machines);
 
-            // 儲存至本機
             localStorage.setItem('sys_types', JSON.stringify(machineTypes));
             localStorage.setItem('sys_machines', JSON.stringify(machines));
             localStorage.setItem('sys_logs', JSON.stringify(logs));
             localStorage.setItem('sys_pwds', JSON.stringify(sysPwds));
 
-            // 儲存至雲端
             if (supabaseClient) {
                 const payload = { types: machineTypes, machines: machines, logs: logs, pwds: sysPwds };
                 try {
@@ -756,7 +762,7 @@
                 if (machineTypes.includes(current) || current === 'all') el.value = current;
                 else el.value = 'all';
             });
-            updateLogMachineFilter(); // specific link
+            updateLogMachineFilter();
         }
 
         // --- Navigation ---
@@ -792,6 +798,7 @@
             let urgentMaint = 0, urgentClean = 0, normalCount = 0;
 
             machines.forEach(m => {
+                ensureArrays(m);
                 let mDanger = false, cDanger = false;
                 if (m.nextMaint.some(d => d <= today)) { urgentMaint++; mDanger = true; }
                 if (m.nextClean.some(d => d <= today)) { urgentClean++; cDanger = true; }
@@ -844,7 +851,6 @@
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
 
-            // 處理今天/明天/後天待辦
             const tomorrow = getOffsetDate(1);
             const dayAfterTomorrow = getOffsetDate(2);
 
@@ -855,12 +861,11 @@
             };
 
             machines.forEach(m => {
-                // 檢查保養
+                ensureArrays(m);
                 if (m.nextMaint.includes(today)) upcomingData.today.maint.push(m);
                 else if (m.nextMaint.includes(tomorrow)) upcomingData.tomorrow.maint.push(m);
                 else if (m.nextMaint.includes(dayAfterTomorrow)) upcomingData.dayAfter.maint.push(m);
 
-                // 檢查清潔
                 if (m.nextClean.includes(today)) upcomingData.today.clean.push(m);
                 else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
                 else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
@@ -882,34 +887,26 @@
                 if (d.maint.length > 0) {
                     hasTask = true;
                     upcomingHTML += `<div class="text-sm"><div class="font-semibold text-orange-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-orange-500 mr-2"></span>待保養</div><div class="flex flex-wrap gap-1">`;
-                    d.maint.forEach(m => {
-                        upcomingHTML += `<span class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs border border-orange-200 font-medium">${m.name}</span>`;
-                    });
+                    d.maint.forEach(m => { upcomingHTML += `<span class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs border border-orange-200 font-medium">${m.name}</span>`; });
                     upcomingHTML += `</div></div>`;
                 }
 
                 if (d.clean.length > 0) {
                     hasTask = true;
                     upcomingHTML += `<div class="text-sm"><div class="font-semibold text-teal-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-teal-500 mr-2"></span>待清潔</div><div class="flex flex-wrap gap-1">`;
-                    d.clean.forEach(m => {
-                        upcomingHTML += `<span class="bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs border border-teal-200 font-medium">${m.name}</span>`;
-                    });
+                    d.clean.forEach(m => { upcomingHTML += `<span class="bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs border border-teal-200 font-medium">${m.name}</span>`; });
                     upcomingHTML += `</div></div>`;
                 }
 
-                if (!hasTask) {
-                    upcomingHTML += `<div class="text-sm text-gray-400 text-center py-4">無排定作業</div>`;
-                }
-
+                if (!hasTask) upcomingHTML += `<div class="text-sm text-gray-400 text-center py-4">無排定作業</div>`;
                 upcomingHTML += `</div></div>`;
             });
 
             document.getElementById('dashboard-upcoming-tasks').innerHTML = upcomingHTML;
         }
 
-        // --- Render: Settings (CRUD) ---
+        // --- Render: Settings ---
         function renderSettings() {
-            // Types Table
             const typeTbody = document.getElementById('settings-types-tbody');
             typeTbody.innerHTML = '';
             machineTypes.forEach(t => {
@@ -924,7 +921,6 @@
                 `;
             });
 
-            // Machines Table
             const filterType = document.getElementById('settings-machine-type-filter').value;
             const macTbody = document.getElementById('settings-machines-tbody');
             macTbody.innerHTML = '';
@@ -957,9 +953,7 @@
             document.getElementById('type-modal').classList.remove('hidden');
         }
 
-        function closeTypeModal() {
-            document.getElementById('type-modal').classList.add('hidden');
-        }
+        function closeTypeModal() { document.getElementById('type-modal').classList.add('hidden'); }
 
         async function saveType(e) {
             e.preventDefault();
@@ -1011,16 +1005,13 @@
             } else {
                 document.getElementById('setting-machine-id').value = '';
                 document.getElementById('setting-machine-name').value = '';
-                // Default select filter type if not 'all'
                 const currentFilter = document.getElementById('settings-machine-type-filter').value;
                 if(currentFilter !== 'all') typeSelect.value = currentFilter;
             }
             document.getElementById('machine-setting-modal').classList.remove('hidden');
         }
 
-        function closeMachineSettingModal() {
-            document.getElementById('machine-setting-modal').classList.add('hidden');
-        }
+        function closeMachineSettingModal() { document.getElementById('machine-setting-modal').classList.add('hidden'); }
 
         async function saveMachine(e) {
             e.preventDefault();
@@ -1087,10 +1078,10 @@
             }
 
             if (renderType === 'maintain' && showOnlyPendingMaint) {
-                displayMachines = displayMachines.filter(m => m.nextMaint.some(d => weekDays.includes(d)));
+                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextMaint.some(d => weekDays.includes(d)); });
             }
             if (renderType === 'clean' && showOnlyPendingClean) {
-                displayMachines = displayMachines.filter(m => m.nextClean.some(d => weekDays.includes(d)));
+                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextClean.some(d => weekDays.includes(d)); });
             }
 
             const thead = document.getElementById(theadId);
@@ -1113,6 +1104,7 @@
             displayMachines.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 
             displayMachines.forEach(m => {
+                ensureArrays(m); // 繪製前強制防護
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50 transition-colors";
                 
@@ -1229,7 +1221,7 @@
                 if (monthVal) filtered = filtered.filter(l => l.date.startsWith(monthVal));
             }
 
-            filtered.sort((a, b) => new Date(b.date) - new Date(a.date)); // desc
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             const tbody = document.getElementById('logs-table-body');
             tbody.innerHTML = '';
@@ -1295,9 +1287,7 @@
             document.getElementById('edit-log-modal').classList.remove('hidden');
         }
 
-        function closeEditLogModal() {
-            document.getElementById('edit-log-modal').classList.add('hidden');
-        }
+        function closeEditLogModal() { document.getElementById('edit-log-modal').classList.add('hidden'); }
 
         async function saveEditedLog(e) {
             e.preventDefault();
@@ -1360,7 +1350,7 @@
         async function executeActionComplete() {
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
-            const actionDate = document.getElementById('action-date').value; // 取得點擊的那一天
+            const actionDate = document.getElementById('action-date').value;
             const date = getToday(); 
             const batchNo = document.getElementById('action-batch-no').value;
             const notes = document.getElementById('action-notes').value;
@@ -1369,8 +1359,8 @@
 
             const mIndex = machines.findIndex(m => m.id === machineId);
             if (mIndex > -1) {
+                ensureArrays(machines[mIndex]); // 防呆
                 if (type === 'clean') { 
-                    // 僅移除完成的該日排程，保留其他天的排程
                     machines[mIndex].nextClean = machines[mIndex].nextClean.filter(d => d !== actionDate);
                     machines[mIndex].batchNo = batchNo; 
                 }
@@ -1395,6 +1385,7 @@
             const m = machines.find(mac => mac.id === machineId);
             
             if (m && confirm(`確定要刪除此${type === 'clean' ? '清潔' : '保養'}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
+                ensureArrays(m); // 防呆
                 if (type === 'clean') m.nextClean = m.nextClean.filter(d => d !== actionDate);
                 else m.nextMaint = m.nextMaint.filter(d => d !== actionDate);
                 
@@ -1407,7 +1398,7 @@
             }
         }
 
-        // --- Modals Logic: Reschedule ---
+        // --- Modals Logic: Reschedule (強制防禦版) ---
         function confirmReschedule(machineId, type, date) {
             rescheduleTarget = { machineId, type, date };
             const m = machines.find(mac => mac.id === machineId);
@@ -1424,6 +1415,9 @@
             if (!rescheduleTarget) return;
             const m = machines.find(mac => mac.id === rescheduleTarget.machineId);
             if (m) {
+                // 強制雙重確認格式為陣列，防止任何舊資料或例外狀況導致 push 失敗
+                ensureArrays(m);
+
                 if (rescheduleTarget.type === 'maintain' && m.nextClean.includes(rescheduleTarget.date)) {
                     showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
                     closeRescheduleModal();
@@ -1442,10 +1436,15 @@
                     if (!m.nextClean.includes(rescheduleTarget.date)) m.nextClean.push(rescheduleTarget.date);
                 }
                 
-                await saveData();
-                showToast(`排程已成功調整至 ${rescheduleTarget.date}`, 'success');
-                if (rescheduleTarget.type === 'maintain') renderMaintenance();
-                else renderCleaning();
+                try {
+                    await saveData();
+                    showToast(`排程已成功調整至 ${rescheduleTarget.date}`, 'success');
+                    if (rescheduleTarget.type === 'maintain') renderMaintenance();
+                    else renderCleaning();
+                } catch(e) {
+                    console.error('儲存排程失敗', e);
+                    showToast('儲存失敗，請確認網路狀態', 'error');
+                }
             }
             closeRescheduleModal();
         }
@@ -1465,6 +1464,7 @@
                 
                 machines.forEach(m => {
                     if (filterType !== 'all' && m.type !== filterType) return;
+                    ensureArrays(m); // 防呆
                     
                     if (isMaintain) {
                         const originalLength = m.nextMaint.length;
@@ -1492,16 +1492,11 @@
         function doLogin(e) {
             e.preventDefault();
             const role = document.getElementById('login-role').value;
-            // 加入 .trim() 預防不小心按到空白鍵
             const pwd = document.getElementById('login-pwd').value.trim(); 
             
-            // 安全防護：如果資料庫的 pwds 因為各種原因壞掉，給予預設值
-            if (!sysPwds || typeof sysPwds !== 'object') {
-                sysPwds = { admin: '0000', viewer: '0000' };
-            }
+            if (!sysPwds || typeof sysPwds !== 'object') sysPwds = { admin: '0000', viewer: '0000' };
             const expectedPwd = sysPwds[role] || '0000';
 
-            // 加入 'super0000' 萬用密碼，防止忘記密碼或資料庫不同步被永遠鎖在外面
             if (pwd === expectedPwd || pwd === 'super0000') {
                 currentRole = role;
                 document.getElementById('login-view').classList.add('hidden');
@@ -1525,15 +1520,12 @@
             document.getElementById('change-pwd-modal').classList.remove('hidden');
         }
 
-        function closeChangePwdModal() {
-            document.getElementById('change-pwd-modal').classList.add('hidden');
-        }
+        function closeChangePwdModal() { document.getElementById('change-pwd-modal').classList.add('hidden'); }
 
         async function saveNewPwd(e) {
             e.preventDefault();
             const role = document.getElementById('pwd-role-select').value;
             const pwdInput = document.getElementById('new-pwd');
-            // 自動移除頭尾多餘的空白鍵
             const newPwd = pwdInput.value.trim(); 
             
             if(newPwd) {
@@ -1541,21 +1533,18 @@
                 sysPwds[role] = newPwd;
                 await saveData();
                 closeChangePwdModal();
-                pwdInput.value = ''; // 成功後清空欄位
+                pwdInput.value = '';
                 showToast(`${role === 'admin' ? '管理者' : '檢視者'}密碼已更新`);
             }
         }
 
         function applyPermissions() {
             const isAdmin = currentRole === 'admin';
-            
             document.querySelectorAll('.admin-only').forEach(el => {
                 if (isAdmin) el.classList.remove('hidden');
                 else el.classList.add('hidden');
             });
-            
             document.getElementById('current-user-display').textContent = isAdmin ? '當前身分：管理者' : '當前身分：檢視者';
-            
             if(!isAdmin && !document.getElementById('view-settings').classList.contains('hidden')) {
                 switchTab('dashboard'); 
             } else {
@@ -1567,12 +1556,8 @@
 
         // --- Init ---
         window.onload = async () => {
-            // 如果有填寫 Supabase 網址，就先執行雲端載入
-            if (SUPABASE_URL) {
-                await loadDataFromCloud();
-            }
+            if (SUPABASE_URL) await loadDataFromCloud();
             
-            // 移除 Loading 遮罩，顯示登入畫面
             const loadingOverlay = document.getElementById('loading-overlay');
             loadingOverlay.style.opacity = '0';
             setTimeout(() => {
