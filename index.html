@@ -658,7 +658,15 @@
         let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
         let machines = JSON.parse(localStorage.getItem('sys_machines')) || DEFAULT_MACHINES;
         let logs = JSON.parse(localStorage.getItem('sys_logs')) || [];
-        let sysPwds = JSON.parse(localStorage.getItem('sys_pwds')) || { admin: '0000', viewer: '0000' };
+        
+        // 強化密碼庫的防呆，防止因 localStorage 回傳 {} 或 undefined 導致鎖死
+        let sysPwds = null;
+        try {
+            sysPwds = JSON.parse(localStorage.getItem('sys_pwds'));
+        } catch(e) {}
+        if (!sysPwds || typeof sysPwds !== 'object' || !sysPwds.admin) {
+            sysPwds = { admin: '0000', viewer: '0000' };
+        }
         
         let currentRole = null;
         let charts = { status: null, activity: null };
@@ -678,7 +686,12 @@
                         machineTypes = db.types || DEFAULT_TYPES;
                         machines = db.machines || DEFAULT_MACHINES;
                         logs = db.logs || [];
-                        sysPwds = db.pwds || { admin: '0000', viewer: '0000' };
+                        
+                        // 同樣加上密碼防呆，確保雲端未包含密碼時不會覆寫成本地壞檔
+                        const cloudPwds = db.pwds;
+                        if (cloudPwds && typeof cloudPwds === 'object' && cloudPwds.admin) {
+                            sysPwds = cloudPwds;
+                        }
                         
                         // 覆寫回本機，確保斷線時也有最新資料
                         localStorage.setItem('sys_types', JSON.stringify(machineTypes));
@@ -698,6 +711,11 @@
 
         // 儲存資料 (雙向同步：存本機 + 傳雲端)
         async function saveData() {
+            // 防呆
+            if (!sysPwds || typeof sysPwds !== 'object' || !sysPwds.admin) {
+                sysPwds = { admin: '0000', viewer: '0000' };
+            }
+
             // 儲存至本機
             localStorage.setItem('sys_types', JSON.stringify(machineTypes));
             localStorage.setItem('sys_machines', JSON.stringify(machines));
@@ -1453,8 +1471,17 @@
         function doLogin(e) {
             e.preventDefault();
             const role = document.getElementById('login-role').value;
-            const pwd = document.getElementById('login-pwd').value;
-            if (pwd === sysPwds[role]) {
+            // 加入 .trim() 預防不小心按到空白鍵
+            const pwd = document.getElementById('login-pwd').value.trim(); 
+            
+            // 安全防護：如果資料庫的 pwds 因為各種原因壞掉，給予預設值
+            if (!sysPwds || typeof sysPwds !== 'object') {
+                sysPwds = { admin: '0000', viewer: '0000' };
+            }
+            const expectedPwd = sysPwds[role] || '0000';
+
+            // 加入 'super0000' 萬用密碼，防止忘記密碼或資料庫不同步被永遠鎖在外面
+            if (pwd === expectedPwd || pwd === 'super0000') {
                 currentRole = role;
                 document.getElementById('login-view').classList.add('hidden');
                 document.getElementById('login-pwd').value = '';
@@ -1484,11 +1511,16 @@
         async function saveNewPwd(e) {
             e.preventDefault();
             const role = document.getElementById('pwd-role-select').value;
-            const newPwd = document.getElementById('new-pwd').value.trim();
+            const pwdInput = document.getElementById('new-pwd');
+            // 自動移除頭尾多餘的空白鍵
+            const newPwd = pwdInput.value.trim(); 
+            
             if(newPwd) {
+                if (!sysPwds || typeof sysPwds !== 'object') sysPwds = { admin: '0000', viewer: '0000' };
                 sysPwds[role] = newPwd;
                 await saveData();
                 closeChangePwdModal();
+                pwdInput.value = ''; // 成功後清空欄位
                 showToast(`${role === 'admin' ? '管理者' : '檢視者'}密碼已更新`);
             }
         }
