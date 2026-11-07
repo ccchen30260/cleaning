@@ -649,14 +649,23 @@
         // ==========================================
         const DEFAULT_TYPES = ['Kaido', '先導', '羅得', '覆捲', '烘箱'];
         const DEFAULT_MACHINES = [
-            ...['W32','W33','W34','W35','W36','W37','W38','W39'].map((n,i)=>({ id: generateId()+i+'k', type: 'Kaido', name: n, nextMaint: getOffsetDate(7), nextClean: getOffsetDate(2), batchNo: '' })),
-            ...['W42','W43','W44'].map((n,i)=>({ id: generateId()+i+'x', type: '先導', name: n, nextMaint: getOffsetDate(14), nextClean: getOffsetDate(5), batchNo: '' })),
-            ...['W31','W40'].map((n,i)=>({ id: generateId()+i+'y', type: '羅得', name: n, nextMaint: getOffsetDate(3), nextClean: getOffsetDate(1), batchNo: '' })),
-            ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: getOffsetDate(30), nextClean: getOffsetDate(7), batchNo: '' })),
+            ...['W32','W33','W34','W35','W36','W37','W38','W39'].map((n,i)=>({ id: generateId()+i+'k', type: 'Kaido', name: n, nextMaint: [getOffsetDate(7)], nextClean: [getOffsetDate(2)], batchNo: '' })),
+            ...['W42','W43','W44'].map((n,i)=>({ id: generateId()+i+'x', type: '先導', name: n, nextMaint: [getOffsetDate(14)], nextClean: [getOffsetDate(5)], batchNo: '' })),
+            ...['W31','W40'].map((n,i)=>({ id: generateId()+i+'y', type: '羅得', name: n, nextMaint: [getOffsetDate(3)], nextClean: [getOffsetDate(1)], batchNo: '' })),
+            ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: [getOffsetDate(30)], nextClean: [getOffsetDate(7)], batchNo: '' })),
         ];
 
+        // 確保所有機台資料的排程都是「多日期陣列」格式
+        function normalizeMachines(macs) {
+            return macs.map(m => {
+                if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
+                if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
+                return m;
+            });
+        }
+
         let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
-        let machines = JSON.parse(localStorage.getItem('sys_machines')) || DEFAULT_MACHINES;
+        let machines = normalizeMachines(JSON.parse(localStorage.getItem('sys_machines')) || DEFAULT_MACHINES);
         let logs = JSON.parse(localStorage.getItem('sys_logs')) || [];
         
         // 強化密碼庫的防呆，防止因 localStorage 回傳 {} 或 undefined 導致鎖死
@@ -684,7 +693,7 @@
                     if (data && data.data) {
                         const db = data.data;
                         machineTypes = db.types || DEFAULT_TYPES;
-                        machines = db.machines || DEFAULT_MACHINES;
+                        machines = normalizeMachines(db.machines || DEFAULT_MACHINES);
                         logs = db.logs || [];
                         
                         // 同樣加上密碼防呆，確保雲端未包含密碼時不會覆寫成本地壞檔
@@ -784,8 +793,8 @@
 
             machines.forEach(m => {
                 let mDanger = false, cDanger = false;
-                if (m.nextMaint && m.nextMaint <= today) { urgentMaint++; mDanger = true; }
-                if (m.nextClean && m.nextClean <= today) { urgentClean++; cDanger = true; }
+                if (m.nextMaint.some(d => d <= today)) { urgentMaint++; mDanger = true; }
+                if (m.nextClean.some(d => d <= today)) { urgentClean++; cDanger = true; }
                 if (!mDanger && !cDanger) normalCount++;
             });
 
@@ -847,14 +856,14 @@
 
             machines.forEach(m => {
                 // 檢查保養
-                if (m.nextMaint === today) upcomingData.today.maint.push(m);
-                else if (m.nextMaint === tomorrow) upcomingData.tomorrow.maint.push(m);
-                else if (m.nextMaint === dayAfterTomorrow) upcomingData.dayAfter.maint.push(m);
+                if (m.nextMaint.includes(today)) upcomingData.today.maint.push(m);
+                else if (m.nextMaint.includes(tomorrow)) upcomingData.tomorrow.maint.push(m);
+                else if (m.nextMaint.includes(dayAfterTomorrow)) upcomingData.dayAfter.maint.push(m);
 
                 // 檢查清潔
-                if (m.nextClean === today) upcomingData.today.clean.push(m);
-                else if (m.nextClean === tomorrow) upcomingData.tomorrow.clean.push(m);
-                else if (m.nextClean === dayAfterTomorrow) upcomingData.dayAfter.clean.push(m);
+                if (m.nextClean.includes(today)) upcomingData.today.clean.push(m);
+                else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
+                else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
             });
 
             let upcomingHTML = '';
@@ -1023,7 +1032,7 @@
                 const m = machines.find(mac => mac.id === id);
                 if (m) { m.type = type; m.name = name; }
             } else {
-                machines.push({ id: generateId(), type, name, nextMaint: getToday(), nextClean: getToday(), batchNo: '' });
+                machines.push({ id: generateId(), type, name, nextMaint: [], nextClean: [], batchNo: '' });
             }
             await saveData();
             closeMachineSettingModal();
@@ -1078,10 +1087,10 @@
             }
 
             if (renderType === 'maintain' && showOnlyPendingMaint) {
-                displayMachines = displayMachines.filter(m => m.nextMaint && weekDays.includes(m.nextMaint));
+                displayMachines = displayMachines.filter(m => m.nextMaint.some(d => weekDays.includes(d)));
             }
             if (renderType === 'clean' && showOnlyPendingClean) {
-                displayMachines = displayMachines.filter(m => m.nextClean && weekDays.includes(m.nextClean));
+                displayMachines = displayMachines.filter(m => m.nextClean.some(d => weekDays.includes(d)));
             }
 
             const thead = document.getElementById(theadId);
@@ -1119,11 +1128,11 @@
                 weekDays.forEach(day => {
                     const isToday = day === getToday();
                     const bgClass = isToday ? 'bg-blue-50/30' : '';
-                    const targetDate = renderType === 'maintain' ? m.nextMaint : m.nextClean;
-                    const actionFn = `openActionModal('${m.id}', '${renderType}')`;
+                    const targetDates = renderType === 'maintain' ? m.nextMaint : m.nextClean;
+                    const actionFn = `openActionModal('${m.id}', '${renderType}', '${day}')`;
                     const isAdmin = currentRole === 'admin';
                     
-                    if (targetDate === day) {
+                    if (targetDates.includes(day)) {
                         const styleCls = renderType === 'maintain' 
                             ? 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700'
                             : 'bg-teal-100 hover:bg-teal-200 border-teal-200 text-teal-800';
@@ -1362,11 +1371,11 @@
             if (mIndex > -1) {
                 if (type === 'clean') { 
                     // 僅移除完成的該日排程，保留其他天的排程
-                    machines[mIndex].nextClean = (machines[mIndex].nextClean || []).filter(d => d !== actionDate);
+                    machines[mIndex].nextClean = machines[mIndex].nextClean.filter(d => d !== actionDate);
                     machines[mIndex].batchNo = batchNo; 
                 }
                 else { 
-                    machines[mIndex].nextMaint = (machines[mIndex].nextMaint || []).filter(d => d !== actionDate);
+                    machines[mIndex].nextMaint = machines[mIndex].nextMaint.filter(d => d !== actionDate);
                 }
             }
 
@@ -1386,8 +1395,8 @@
             const m = machines.find(mac => mac.id === machineId);
             
             if (m && confirm(`確定要刪除此${type === 'clean' ? '清潔' : '保養'}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
-                if (type === 'clean') m.nextClean = (m.nextClean || []).filter(d => d !== actionDate);
-                else m.nextMaint = (m.nextMaint || []).filter(d => d !== actionDate);
+                if (type === 'clean') m.nextClean = m.nextClean.filter(d => d !== actionDate);
+                else m.nextMaint = m.nextMaint.filter(d => d !== actionDate);
                 
                 await saveData();
                 closeActionModal();
@@ -1415,12 +1424,12 @@
             if (!rescheduleTarget) return;
             const m = machines.find(mac => mac.id === rescheduleTarget.machineId);
             if (m) {
-                if (rescheduleTarget.type === 'maintain' && (m.nextClean || []).includes(rescheduleTarget.date)) {
+                if (rescheduleTarget.type === 'maintain' && m.nextClean.includes(rescheduleTarget.date)) {
                     showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
                     closeRescheduleModal();
                     return;
                 }
-                if (rescheduleTarget.type === 'clean' && (m.nextMaint || []).includes(rescheduleTarget.date)) {
+                if (rescheduleTarget.type === 'clean' && m.nextMaint.includes(rescheduleTarget.date)) {
                     showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
                     closeRescheduleModal();
                     return;
@@ -1458,12 +1467,12 @@
                     if (filterType !== 'all' && m.type !== filterType) return;
                     
                     if (isMaintain) {
-                        const originalLength = (m.nextMaint || []).length;
-                        m.nextMaint = (m.nextMaint || []).filter(d => !weekDays.includes(d));
+                        const originalLength = m.nextMaint.length;
+                        m.nextMaint = m.nextMaint.filter(d => !weekDays.includes(d));
                         if (originalLength !== m.nextMaint.length) clearedCount++;
                     } else {
-                        const originalLength = (m.nextClean || []).length;
-                        m.nextClean = (m.nextClean || []).filter(d => !weekDays.includes(d));
+                        const originalLength = m.nextClean.length;
+                        m.nextClean = m.nextClean.filter(d => !weekDays.includes(d));
                         if (originalLength !== m.nextClean.length) clearedCount++;
                     }
                 });
