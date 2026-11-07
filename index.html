@@ -12,6 +12,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS (Excel Export) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .tab-active { @apply text-blue-600 border-b-2 border-blue-600 font-semibold; }
@@ -372,9 +374,16 @@
                         <input type="month" id="filter-log-month" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
 
-                    <button onclick="renderLogs()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm whitespace-nowrap">
-                        查詢
-                    </button>
+                    <!-- Action Buttons -->
+                    <div class="flex gap-2">
+                        <button onclick="renderLogs()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm whitespace-nowrap">
+                            查詢
+                        </button>
+                        <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm whitespace-nowrap flex items-center">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            匯出
+                        </button>
+                    </div>
                 </div>
 
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -691,6 +700,9 @@
         let rescheduleTarget = null;
         let showOnlyPendingMaint = false;
         let showOnlyPendingClean = false;
+        
+        // 匯出用暫存資料
+        let currentFilteredLogs = []; 
 
         // 雲端資料庫載入
         async function loadDataFromCloud() {
@@ -1222,6 +1234,9 @@
             }
 
             filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            // 儲存至暫存變數，供 Excel 匯出使用
+            currentFilteredLogs = filtered;
 
             const tbody = document.getElementById('logs-table-body');
             tbody.innerHTML = '';
@@ -1262,6 +1277,40 @@
                     </tr>
                 `;
             });
+        }
+
+        // --- Export to Excel ---
+        function exportToExcel() {
+            if (!currentFilteredLogs || currentFilteredLogs.length === 0) {
+                showToast('畫面上沒有紀錄可供匯出', 'error');
+                return;
+            }
+
+            const exportData = currentFilteredLogs.map(l => {
+                const m = machines.find(mac => mac.id === l.machineId);
+                return {
+                    '日期': l.date,
+                    '機台類型': m ? m.type : '-',
+                    '機台名稱': m ? m.name : '已刪除機台',
+                    '作業類型': l.type === 'maintain' ? '保養' : '清潔',
+                    '清潔後起始批號': l.batchNo || '',
+                    '備註說明': l.notes || ''
+                };
+            });
+
+            try {
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "作業紀錄");
+                
+                const todayStr = getToday().replace(/-/g, '');
+                XLSX.writeFile(wb, `機台作業紀錄_${todayStr}.xlsx`);
+                
+                showToast('已成功匯出 Excel 檔', 'success');
+            } catch (err) {
+                console.error("匯出失敗", err);
+                showToast('匯出失敗，請重試', 'error');
+            }
         }
 
         async function deleteLog(logId) {
