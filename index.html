@@ -485,6 +485,11 @@
                         <input type="text" id="action-machine-name" readonly class="w-full border border-gray-200 bg-gray-50 rounded-lg px-4 py-2 text-gray-600 cursor-not-allowed">
                     </div>
                     
+                    <div class="mb-4">
+                        <label id="action-completion-date-label" class="block text-sm font-bold text-blue-700 mb-1">完成日期 <span class="text-red-500">*</span></label>
+                        <input type="date" id="action-completion-date" required class="w-full border border-blue-300 bg-blue-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
                     <!-- Only shown for cleaning -->
                     <div id="batch-input-group" class="mb-4 hidden">
                         <label class="block text-sm font-bold text-teal-700 mb-1">設定清潔後起始批號 <span class="text-red-500">*</span></label>
@@ -1366,6 +1371,8 @@
 
             const isClean = type === 'clean';
             document.getElementById('action-modal-title').textContent = isClean ? '執行清潔作業' : '執行保養作業';
+            document.getElementById('action-completion-date-label').innerHTML = (isClean ? '清潔完成日期' : '保養完成日期') + ' <span class="text-red-500">*</span>';
+            document.getElementById('action-completion-date').value = getToday();
             
             const batchGroup = document.getElementById('batch-input-group');
             const batchInput = document.getElementById('action-batch-no');
@@ -1400,7 +1407,7 @@
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
             const actionDate = document.getElementById('action-date').value;
-            const date = getToday(); 
+            const date = document.getElementById('action-completion-date').value || getToday(); 
             const batchNo = document.getElementById('action-batch-no').value;
             const notes = document.getElementById('action-notes').value;
 
