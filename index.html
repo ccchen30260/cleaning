@@ -935,6 +935,7 @@
 
             if (charts.activity) charts.activity.destroy();
             const ctxAct = document.getElementById('activityChart').getContext('2d');
+            
             charts.activity = new Chart(ctxAct, {
                 type: 'bar',
                 data: {
@@ -945,7 +946,53 @@
                         { label: '調機', data: adjData, backgroundColor: '#6366F1', borderRadius: 4 }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 14, weight: 'bold' },
+                                padding: 20
+                            },
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                
+                                if (ci.isDatasetVisible(index)) {
+                                    let visibleCount = 0;
+                                    ci.data.datasets.forEach((d, i) => {
+                                        if (ci.isDatasetVisible(i)) visibleCount++;
+                                    });
+
+                                    if (visibleCount === 1) {
+                                        // 若只有自己被選取，再點擊一次則顯示全部
+                                        ci.data.datasets.forEach((d, i) => ci.setDatasetVisibility(i, true));
+                                    } else {
+                                        // 若有多個顯示，點擊後只留下自己
+                                        ci.data.datasets.forEach((d, i) => ci.setDatasetVisibility(i, i === index));
+                                    }
+                                } else {
+                                    // 若原本是隱藏的，點擊後只顯示自己
+                                    ci.data.datasets.forEach((d, i) => ci.setDatasetVisibility(i, i === index));
+                                }
+                                ci.update();
+                            }
+                        }
+                    },
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { stepSize: 1, font: { size: 12 } },
+                            grid: { color: '#f3f4f6' }
+                        },
+                        x: {
+                            ticks: { font: { size: 12 } },
+                            grid: { display: false }
+                        }
+                    } 
+                }
             });
 
             const tomorrow = getOffsetDate(1);
