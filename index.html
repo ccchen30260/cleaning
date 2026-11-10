@@ -842,9 +842,13 @@
                 if (!el) return;
                 const current = el.value;
                 let html = '<option value="all">所有類型</option>';
-                machineTypes.forEach(t => html += `<option value="${t}">${t}</option>`);
+                
+                // 如果是調機篩選器，過濾掉「烘箱」
+                const validTypes = id === 'adj-type-filter' ? machineTypes.filter(t => t !== '烘箱') : machineTypes;
+                
+                validTypes.forEach(t => html += `<option value="${t}">${t}</option>`);
                 el.innerHTML = html;
-                if (machineTypes.includes(current) || current === 'all') el.value = current;
+                if (validTypes.includes(current) || current === 'all') el.value = current;
                 else el.value = 'all';
             });
             updateLogMachineFilter();
@@ -1183,6 +1187,12 @@
             const filterType = document.getElementById(filterId).value;
             
             let displayMachines = machines;
+            
+            // 如果正在渲染調機看板，無論選擇為何，都過濾掉「烘箱」
+            if (renderType === 'adjust') {
+                displayMachines = displayMachines.filter(m => m.type !== '烘箱');
+            }
+
             if (filterType !== 'all') {
                 displayMachines = displayMachines.filter(m => m.type === filterType);
             }
