@@ -97,6 +97,10 @@
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
                 清潔排程管理
             </button>
+            <button onclick="switchTab('adjustment')" id="nav-adjustment" class="w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                調機排程管理
+            </button>
             <button onclick="switchTab('logs')" id="nav-logs" class="w-full flex items-center px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                 作業紀錄查詢
@@ -128,6 +132,7 @@
                 <button onclick="switchTab('dashboard')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">儀表板</button>
                 <button onclick="switchTab('maintenance')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">保養</button>
                 <button onclick="switchTab('cleaning')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">清潔</button>
+                <button onclick="switchTab('adjustment')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">調機</button>
                 <button onclick="switchTab('logs')" class="text-xs p-2 bg-gray-100 rounded whitespace-nowrap">紀錄</button>
                 <button onclick="switchTab('settings')" id="mob-nav-settings" class="admin-only hidden text-xs p-2 bg-gray-100 rounded whitespace-nowrap">設定</button>
                 <button onclick="openChangePwdModal()" class="admin-only hidden text-xs p-2 bg-gray-100 rounded whitespace-nowrap">密碼</button>
@@ -143,7 +148,7 @@
                 <h2 class="text-2xl font-bold text-gray-800">系統儀表板</h2>
                 
                 <!-- Stats Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                         <div class="text-sm text-gray-500 font-medium mb-1">總機台數</div>
                         <div class="text-3xl font-bold text-gray-800" id="stat-total-machines">0</div>
@@ -155,6 +160,10 @@
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                         <div class="text-sm text-gray-500 font-medium mb-1">即將/逾期 清潔數</div>
                         <div class="text-3xl font-bold text-teal-600" id="stat-urgent-clean">0</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-sm text-gray-500 font-medium mb-1">即將/逾期 調機數</div>
+                        <div class="text-3xl font-bold text-indigo-600" id="stat-urgent-adj">0</div>
                     </div>
                 </div>
 
@@ -320,6 +329,46 @@
             </div>
         </div>
 
+        <!-- View: Adjustment -->
+        <div id="view-adjustment" class="hidden space-y-4">
+            <h2 class="text-2xl font-bold text-gray-800">調機排程管理 (每週預排)</h2>
+            
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <div class="flex items-center space-x-3 w-full md:w-auto">
+                    <label class="text-sm font-medium text-gray-600 whitespace-nowrap">顯示類型:</label>
+                    <select id="adj-type-filter" onchange="renderAdjustment()" class="w-full md:w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="all">所有類型</option>
+                        <!-- JS Injection -->
+                    </select>
+                </div>
+
+                <div class="flex space-x-2 items-center flex-wrap gap-y-2">
+                    <button onclick="togglePending('adjust')" id="toggle-pending-adj" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-sm font-bold shadow-sm transition-colors mr-2">顯示待調機</button>
+                    <button onclick="clearCurrentWeek('adjust')" class="admin-only hidden px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-bold shadow-sm transition-colors mr-2">一鍵清除</button>
+                    <button onclick="changeWeek('adjust', -1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">&lt; 上週</button>
+                    <span id="adj-week-label" class="font-bold text-gray-700 px-2 text-sm md:text-base"></span>
+                    <button onclick="changeWeek('adjust', 1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">下週 &gt;</button>
+                    <button onclick="changeWeek('adjust', 0)" class="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 text-sm ml-2 font-bold">本週</button>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative flex flex-col">
+                <div class="overflow-auto max-h-[65vh]">
+                    <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[800px]">
+                        <thead class="bg-gray-50 text-gray-600 font-medium" id="adjustment-thead">
+                            <!-- JS Injection -->
+                        </thead>
+                        <tbody id="adjustment-tbody" class="divide-y divide-gray-100 text-gray-700">
+                            <!-- JS Injection -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="admin-only hidden p-3 bg-indigo-50/50 border-t text-xs text-indigo-800 font-medium">
+                    💡 提示：點擊有顏色的「預排區塊」可執行調機作業；點擊「空白日期欄位」則可將該機台的調機排程直接調整至該日。
+                </div>
+            </div>
+        </div>
+
         <!-- View: Logs -->
         <div id="view-logs" class="hidden space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -350,9 +399,9 @@
                         <option value="all">所有機台</option>
                     </select>
                     <select id="filter-log-action" onchange="renderLogs()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="all">所有作業</option>
                         <option value="maintain">保養</option>
                         <option value="clean">清潔</option>
+                        <option value="adjust">調機</option>
                     </select>
                     <select id="filter-log-time-mode" onchange="toggleTimeFilterMode(); renderLogs()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="all">全部時間</option>
@@ -377,16 +426,8 @@
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div class="overflow-auto max-h-[60vh]">
                     <table class="w-full text-left text-sm whitespace-nowrap">
-                        <thead class="bg-gray-50 text-gray-600 font-medium sticky top-0 shadow-sm z-10">
-                            <tr>
-                                <th class="px-6 py-3">日期</th>
-                                <th class="px-6 py-3">類型</th>
-                                <th class="px-6 py-3">機台</th>
-                                <th class="px-6 py-3">作業</th>
-                                <th class="px-6 py-3">清潔後起始批號</th>
-                                <th class="px-6 py-3">備註</th>
-                                <th class="px-6 py-3 admin-only">操作</th>
-                            </tr>
+                        <thead id="logs-table-head" class="bg-gray-50 text-gray-600 font-medium sticky top-0 shadow-sm z-10">
+                            <!-- JS Injection -->
                         </thead>
                         <tbody id="logs-table-body" class="divide-y divide-gray-100 text-gray-700">
                             <!-- JS Injection -->
@@ -458,6 +499,24 @@
                         <p class="text-xs text-gray-500 mt-1">清潔完成後，該機台將從此批號開始計算。</p>
                     </div>
 
+                    <!-- Only shown for adjustment -->
+                    <div id="adjust-input-group" class="mb-4 hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-indigo-700 mb-1">開始日期 <span class="text-red-500">*</span></label>
+                            <input type="date" id="action-start-date" class="w-full border border-indigo-300 bg-indigo-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-indigo-700 mb-1">開始型號 <span class="text-red-500">*</span></label>
+                                <input type="text" id="action-start-model" placeholder="原機台型號" class="w-full border border-indigo-300 bg-indigo-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-indigo-700 mb-1">調機後型號 <span class="text-red-500">*</span></label>
+                                <input type="text" id="action-end-model" placeholder="調機後型號" class="w-full border border-indigo-300 bg-indigo-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-5">
                         <label class="block text-sm font-medium text-gray-700 mb-1">備註說明</label>
                         <textarea id="action-notes" rows="2" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="選填"></textarea>
@@ -523,6 +582,24 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">清潔後起始批號</label>
                         <input type="text" id="edit-log-batch" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
+                    
+                    <div id="edit-log-adjust-group" class="mb-4 hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">開始日期</label>
+                            <input type="date" id="edit-log-start-date" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">開始型號</label>
+                                <input type="text" id="edit-log-start-model" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">調機後型號</label>
+                                <input type="text" id="edit-log-end-model" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-5">
                         <label class="block text-sm font-medium text-gray-700 mb-2">備註說明</label>
                         <textarea id="edit-log-notes" rows="3" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
@@ -625,10 +702,10 @@
         // ==========================================
         const DEFAULT_TYPES = ['Kaido', '先導', '羅得', '覆捲', '烘箱'];
         const DEFAULT_MACHINES = [
-            ...['W32','W33','W34','W35','W36','W37','W38','W39'].map((n,i)=>({ id: generateId()+i+'k', type: 'Kaido', name: n, nextMaint: [getOffsetDate(7)], nextClean: [getOffsetDate(2)], batchNo: '' })),
-            ...['W42','W43','W44'].map((n,i)=>({ id: generateId()+i+'x', type: '先導', name: n, nextMaint: [getOffsetDate(14)], nextClean: [getOffsetDate(5)], batchNo: '' })),
-            ...['W31','W40'].map((n,i)=>({ id: generateId()+i+'y', type: '羅得', name: n, nextMaint: [getOffsetDate(3)], nextClean: [getOffsetDate(1)], batchNo: '' })),
-            ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: [getOffsetDate(30)], nextClean: [getOffsetDate(7)], batchNo: '' })),
+            ...['W32','W33','W34','W35','W36','W37','W38','W39'].map((n,i)=>({ id: generateId()+i+'k', type: 'Kaido', name: n, nextMaint: [getOffsetDate(7)], nextClean: [getOffsetDate(2)], nextAdj: [], batchNo: '' })),
+            ...['W42','W43','W44'].map((n,i)=>({ id: generateId()+i+'x', type: '先導', name: n, nextMaint: [getOffsetDate(14)], nextClean: [getOffsetDate(5)], nextAdj: [], batchNo: '' })),
+            ...['W31','W40'].map((n,i)=>({ id: generateId()+i+'y', type: '羅得', name: n, nextMaint: [getOffsetDate(3)], nextClean: [getOffsetDate(1)], nextAdj: [], batchNo: '' })),
+            ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: [getOffsetDate(30)], nextClean: [getOffsetDate(7)], nextAdj: [], batchNo: '' })),
         ];
 
         // 確保所有機台資料的排程都是「多日期陣列」格式 (強制防呆處理)
@@ -636,6 +713,7 @@
             return macs.map(m => {
                 if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
                 if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
+                if (!Array.isArray(m.nextAdj)) m.nextAdj = m.nextAdj ? [m.nextAdj] : [];
                 return m;
             });
         }
@@ -645,6 +723,7 @@
             if (!m) return;
             if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
             if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
+            if (!Array.isArray(m.nextAdj)) m.nextAdj = m.nextAdj ? [m.nextAdj] : [];
         }
 
         let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
@@ -663,9 +742,11 @@
         let charts = { status: null, activity: null };
         let currentMaintWeek = getMonday(new Date());
         let currentCleanWeek = getMonday(new Date());
+        let currentAdjWeek = getMonday(new Date());
         let rescheduleTarget = null;
         let showOnlyPendingMaint = false;
         let showOnlyPendingClean = false;
+        let showOnlyPendingAdj = false;
         
         // 匯出用暫存資料
         let currentFilteredLogs = []; 
@@ -729,7 +810,7 @@
         }
 
         function populateGlobalTypeFilters() {
-            const filters = ['maint-type-filter', 'clean-type-filter', 'filter-log-type', 'settings-machine-type-filter'];
+            const filters = ['maint-type-filter', 'clean-type-filter', 'adj-type-filter', 'filter-log-type', 'settings-machine-type-filter'];
             filters.forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
@@ -762,6 +843,7 @@
             if(tabId === 'settings') renderSettings();
             if(tabId === 'maintenance') renderMaintenance();
             if(tabId === 'cleaning') renderCleaning();
+            if(tabId === 'adjustment') renderAdjustment();
             if(tabId === 'logs') {
                 populateGlobalTypeFilters();
                 renderLogs();
@@ -773,26 +855,28 @@
             document.getElementById('stat-total-machines').textContent = machines.length;
             
             const today = getToday();
-            let urgentMaint = 0, urgentClean = 0, normalCount = 0;
+            let urgentMaint = 0, urgentClean = 0, urgentAdj = 0, normalCount = 0;
 
             machines.forEach(m => {
                 ensureArrays(m);
-                let mDanger = false, cDanger = false;
+                let mDanger = false, cDanger = false, aDanger = false;
                 if (m.nextMaint.some(d => d <= today)) { urgentMaint++; mDanger = true; }
                 if (m.nextClean.some(d => d <= today)) { urgentClean++; cDanger = true; }
-                if (!mDanger && !cDanger) normalCount++;
+                if (m.nextAdj.some(d => d <= today)) { urgentAdj++; aDanger = true; }
+                if (!mDanger && !cDanger && !aDanger) normalCount++;
             });
 
             document.getElementById('stat-urgent-maint').textContent = urgentMaint;
             document.getElementById('stat-urgent-clean').textContent = urgentClean;
+            document.getElementById('stat-urgent-adj').textContent = urgentAdj;
 
             if (charts.status) charts.status.destroy();
             const ctxStatus = document.getElementById('statusChart').getContext('2d');
             charts.status = new Chart(ctxStatus, {
                 type: 'doughnut',
                 data: {
-                    labels: ['正常', '需保養', '需清潔'],
-                    datasets: [{ data: [normalCount, urgentMaint, urgentClean], backgroundColor: ['#10B981', '#F97316', '#14B8A6'], borderWidth: 0 }]
+                    labels: ['正常', '需保養', '需清潔', '需調機'],
+                    datasets: [{ data: [normalCount, urgentMaint, urgentClean, urgentAdj], backgroundColor: ['#10B981', '#F97316', '#14B8A6', '#6366F1'], borderWidth: 0 }]
                 },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
             });
@@ -801,19 +885,21 @@
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const recentLogs = logs.filter(l => new Date(l.date) >= thirtyDaysAgo);
             const counts = {};
-            machines.forEach(m => { counts[m.name] = { maint: 0, clean: 0 }; });
+            machines.forEach(m => { counts[m.name] = { maint: 0, clean: 0, adj: 0 }; });
             
             recentLogs.forEach(l => {
                 const m = machines.find(mac => mac.id === l.machineId);
                 if(m && counts[m.name]) {
                     if(l.type === 'maintain') counts[m.name].maint++;
                     if(l.type === 'clean') counts[m.name].clean++;
+                    if(l.type === 'adjust') counts[m.name].adj++;
                 }
             });
 
             const labels = Object.keys(counts);
             const maintData = labels.map(l => counts[l].maint);
             const cleanData = labels.map(l => counts[l].clean);
+            const adjData = labels.map(l => counts[l].adj);
 
             if (charts.activity) charts.activity.destroy();
             const ctxAct = document.getElementById('activityChart').getContext('2d');
@@ -822,8 +908,9 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: '保養次數', data: maintData, backgroundColor: '#3B82F6', borderRadius: 4 },
-                        { label: '清潔次數', data: cleanData, backgroundColor: '#14B8A6', borderRadius: 4 }
+                        { label: '保養', data: maintData, backgroundColor: '#3B82F6', borderRadius: 4 },
+                        { label: '清潔', data: cleanData, backgroundColor: '#14B8A6', borderRadius: 4 },
+                        { label: '調機', data: adjData, backgroundColor: '#6366F1', borderRadius: 4 }
                     ]
                 },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
@@ -833,9 +920,9 @@
             const dayAfterTomorrow = getOffsetDate(2);
 
             const upcomingData = {
-                today: { date: today, label: '今天', maint: [], clean: [] },
-                tomorrow: { date: tomorrow, label: '明天', maint: [], clean: [] },
-                dayAfter: { date: dayAfterTomorrow, label: '後天', maint: [], clean: [] }
+                today: { date: today, label: '今天', maint: [], clean: [], adj: [] },
+                tomorrow: { date: tomorrow, label: '明天', maint: [], clean: [], adj: [] },
+                dayAfter: { date: dayAfterTomorrow, label: '後天', maint: [], clean: [], adj: [] }
             };
 
             machines.forEach(m => {
@@ -847,6 +934,10 @@
                 if (m.nextClean.includes(today)) upcomingData.today.clean.push(m);
                 else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
                 else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
+                
+                if (m.nextAdj.includes(today)) upcomingData.today.adj.push(m);
+                else if (m.nextAdj.includes(tomorrow)) upcomingData.tomorrow.adj.push(m);
+                else if (m.nextAdj.includes(dayAfterTomorrow)) upcomingData.dayAfter.adj.push(m);
             });
 
             let upcomingHTML = '';
@@ -873,6 +964,13 @@
                     hasTask = true;
                     upcomingHTML += `<div class="text-sm"><div class="font-semibold text-teal-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-teal-500 mr-2"></span>待清潔</div><div class="flex flex-wrap gap-1">`;
                     d.clean.forEach(m => { upcomingHTML += `<span class="bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs border border-teal-200 font-medium">${m.name}</span>`; });
+                    upcomingHTML += `</div></div>`;
+                }
+                
+                if (d.adj.length > 0) {
+                    hasTask = true;
+                    upcomingHTML += `<div class="text-sm"><div class="font-semibold text-indigo-700 mb-1 flex items-center"><span class="w-2 h-2 rounded-full bg-indigo-500 mr-2"></span>待調機</div><div class="flex flex-wrap gap-1">`;
+                    d.adj.forEach(m => { upcomingHTML += `<span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs border border-indigo-200 font-medium">${m.name}</span>`; });
                     upcomingHTML += `</div></div>`;
                 }
 
@@ -946,7 +1044,7 @@
                     machines.forEach(m => { if (m.type === oldName) m.type = newName; });
                 }
             } else {
-                if (!machineTypes.includes(newName)) machineTypes.push(newName);
+                machines.push({ id: generateId(), type, name, nextMaint: [], nextClean: [], nextAdj: [], batchNo: '' });
             }
             await saveData();
             closeTypeModal();
@@ -1026,10 +1124,14 @@
                 showOnlyPendingMaint = !showOnlyPendingMaint;
                 document.getElementById('toggle-pending-maint').textContent = showOnlyPendingMaint ? '顯示全部機台' : '顯示待保養';
                 renderMaintenance();
-            } else {
+            } else if (type === 'clean') {
                 showOnlyPendingClean = !showOnlyPendingClean;
                 document.getElementById('toggle-pending-clean').textContent = showOnlyPendingClean ? '顯示全部機台' : '顯示待清潔';
                 renderCleaning();
+            } else if (type === 'adjust') {
+                showOnlyPendingAdj = !showOnlyPendingAdj;
+                document.getElementById('toggle-pending-adj').textContent = showOnlyPendingAdj ? '顯示全部機台' : '顯示待調機';
+                renderAdjustment();
             }
         }
 
@@ -1038,16 +1140,20 @@
                 if (offset === 0) currentMaintWeek = getMonday(new Date());
                 else currentMaintWeek.setDate(currentMaintWeek.getDate() + (offset * 7));
                 renderMaintenance();
-            } else {
+            } else if (type === 'clean') {
                 if (offset === 0) currentCleanWeek = getMonday(new Date());
                 else currentCleanWeek.setDate(currentCleanWeek.getDate() + (offset * 7));
                 renderCleaning();
+            } else if (type === 'adjust') {
+                if (offset === 0) currentAdjWeek = getMonday(new Date());
+                else currentAdjWeek.setDate(currentAdjWeek.getDate() + (offset * 7));
+                renderAdjustment();
             }
         }
 
         function buildScheduleTable(tbodyId, theadId, weekStart, renderType) {
             const weekDays = getWeekDays(weekStart);
-            const filterId = renderType === 'maintain' ? 'maint-type-filter' : 'clean-type-filter';
+            const filterId = renderType === 'maintain' ? 'maint-type-filter' : (renderType === 'clean' ? 'clean-type-filter' : 'adj-type-filter');
             const filterType = document.getElementById(filterId).value;
             
             let displayMachines = machines;
@@ -1060,6 +1166,9 @@
             }
             if (renderType === 'clean' && showOnlyPendingClean) {
                 displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextClean.some(d => weekDays.includes(d)); });
+            }
+            if (renderType === 'adjust' && showOnlyPendingAdj) {
+                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextAdj.some(d => weekDays.includes(d)); });
             }
 
             const thead = document.getElementById(theadId);
@@ -1098,15 +1207,22 @@
                 weekDays.forEach(day => {
                     const isToday = day === getToday();
                     const bgClass = isToday ? 'bg-blue-50/30' : '';
-                    const targetDates = renderType === 'maintain' ? m.nextMaint : m.nextClean;
+                    const targetDates = renderType === 'maintain' ? m.nextMaint : (renderType === 'clean' ? m.nextClean : m.nextAdj);
                     const actionFn = `openActionModal('${m.id}', '${renderType}', '${day}')`;
                     const isAdmin = currentRole === 'admin';
                     
                     if (targetDates.includes(day)) {
-                        const styleCls = renderType === 'maintain' 
-                            ? 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700'
-                            : 'bg-teal-100 hover:bg-teal-200 border-teal-200 text-teal-800';
-                        const text = renderType === 'maintain' ? '保養預排' : '清潔預排';
+                        let styleCls, text;
+                        if (renderType === 'maintain') {
+                            styleCls = 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700';
+                            text = '保養預排';
+                        } else if (renderType === 'clean') {
+                            styleCls = 'bg-teal-100 hover:bg-teal-200 border-teal-200 text-teal-800';
+                            text = '清潔預排';
+                        } else {
+                            styleCls = 'bg-indigo-100 hover:bg-indigo-200 border-indigo-200 text-indigo-800';
+                            text = '調機預排';
+                        }
 
                         const cursorCls = isAdmin ? 'cursor-pointer hover:scale-105 shadow-sm' : 'opacity-80';
                         const clickAttr = isAdmin ? `onclick="${actionFn}"` : '';
@@ -1147,6 +1263,12 @@
             const weekDays = getWeekDays(currentCleanWeek);
             document.getElementById('clean-week-label').textContent = `${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')}`;
             buildScheduleTable('cleaning-tbody', 'cleaning-thead', currentCleanWeek, 'clean');
+        }
+        
+        function renderAdjustment() {
+            const weekDays = getWeekDays(currentAdjWeek);
+            document.getElementById('adj-week-label').textContent = `${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')}`;
+            buildScheduleTable('adjustment-tbody', 'adjustment-thead', currentAdjWeek, 'adjust');
         }
 
         // --- Render: Logs ---
@@ -1191,8 +1313,8 @@
             const actionFilter = actionFilterEl.value;
             const timeMode = timeModeEl.value;
             
-            let filtered = logs;
-            if (actionFilter !== 'all') filtered = filtered.filter(l => l.type === actionFilter);
+            // 過濾作業類型 (因為移除了「所有作業」，現在只會是 maintain / clean / adjust 其中一種)
+            let filtered = logs.filter(l => l.type === actionFilter);
             
             if (machineFilter !== 'all') {
                 filtered = filtered.filter(l => l.machineId === machineFilter);
@@ -1216,13 +1338,31 @@
             // 儲存至暫存變數，供 Excel 匯出使用
             currentFilteredLogs = filtered;
 
+            const thead = document.getElementById('logs-table-head');
             const tbody = document.getElementById('logs-table-body');
-            tbody.innerHTML = '';
-            
             const isAdmin = currentRole === 'admin';
 
+            // 動態產生表頭標題列
+            let theadHTML = '<tr>';
+            if (actionFilter === 'maintain') {
+                theadHTML += `<th class="px-6 py-3">日期</th><th class="px-6 py-3">類型</th><th class="px-6 py-3">機台</th><th class="px-6 py-3">作業</th><th class="px-6 py-3">備註</th>`;
+            } else if (actionFilter === 'clean') {
+                theadHTML += `<th class="px-6 py-3">日期</th><th class="px-6 py-3">類型</th><th class="px-6 py-3">機台</th><th class="px-6 py-3">作業</th><th class="px-6 py-3">清潔後起始批號</th><th class="px-6 py-3">備註</th>`;
+            } else if (actionFilter === 'adjust') {
+                theadHTML += `<th class="px-6 py-3">開始日期</th><th class="px-6 py-3">完成日期</th><th class="px-6 py-3">類型</th><th class="px-6 py-3">機台</th><th class="px-6 py-3">作業</th><th class="px-6 py-3">型號</th><th class="px-6 py-3">備註</th>`;
+            }
+            if (isAdmin) theadHTML += `<th class="px-6 py-3 admin-only">操作</th>`;
+            theadHTML += '</tr>';
+            thead.innerHTML = theadHTML;
+
+            tbody.innerHTML = '';
+            
+            // 計算欄位數，用於「無資料」的合併儲存格
+            let colCount = actionFilter === 'maintain' ? 5 : (actionFilter === 'clean' ? 6 : 7);
+            if (isAdmin) colCount++;
+
             if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}" class="text-center py-8 text-gray-500">尚無符合條件的紀錄</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-8 text-gray-500">尚無符合條件的紀錄</td></tr>`;
                 return;
             }
 
@@ -1230,9 +1370,11 @@
                 const m = machines.find(mac => mac.id === l.machineId);
                 const mName = m ? m.name : "已刪除機台";
                 const mType = m ? m.type : "-";
-                const typeLabel = l.type === 'maintain' 
-                    ? '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>' 
-                    : '<span class="text-teal-600 bg-teal-50 px-2 py-1 rounded font-medium">清潔</span>';
+                
+                let typeLabel = '';
+                if (l.type === 'maintain') typeLabel = '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>';
+                else if (l.type === 'clean') typeLabel = '<span class="text-teal-600 bg-teal-50 px-2 py-1 rounded font-medium">清潔</span>';
+                else if (l.type === 'adjust') typeLabel = '<span class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded font-medium">調機</span>';
                 
                 let actionCol = '';
                 if (isAdmin) {
@@ -1243,17 +1385,42 @@
                     </td>`;
                 }
 
-                tbody.innerHTML += `
-                    <tr class="hover:bg-gray-50">
+                let rowHTML = `<tr class="hover:bg-gray-50">`;
+                
+                // 根據不同類型，產生對應順序的欄位內容
+                if (actionFilter === 'maintain') {
+                    rowHTML += `
                         <td class="px-6 py-4">${l.date}</td>
                         <td class="px-6 py-4 text-gray-500">${mType}</td>
                         <td class="px-6 py-4 font-bold text-gray-800">${mName}</td>
                         <td class="px-6 py-4">${typeLabel}</td>
-                        <td class="px-6 py-4 font-mono text-sm">${l.batchNo || '-'}</td>
                         <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
-                        ${actionCol}
-                    </tr>
-                `;
+                    `;
+                } else if (actionFilter === 'clean') {
+                    const batchHtml = l.batchNo ? `<span class="font-mono text-sm">${l.batchNo}</span>` : '-';
+                    rowHTML += `
+                        <td class="px-6 py-4">${l.date}</td>
+                        <td class="px-6 py-4 text-gray-500">${mType}</td>
+                        <td class="px-6 py-4 font-bold text-gray-800">${mName}</td>
+                        <td class="px-6 py-4">${typeLabel}</td>
+                        <td class="px-6 py-4">${batchHtml}</td>
+                        <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
+                    `;
+                } else if (actionFilter === 'adjust') {
+                    const modelHtml = `${l.startModel || '-'} ➔ ${l.endModel || '-'}`;
+                    rowHTML += `
+                        <td class="px-6 py-4">${l.startDate || '-'}</td>
+                        <td class="px-6 py-4">${l.date || '-'}</td>
+                        <td class="px-6 py-4 text-gray-500">${mType}</td>
+                        <td class="px-6 py-4 font-bold text-gray-800">${mName}</td>
+                        <td class="px-6 py-4">${typeLabel}</td>
+                        <td class="px-6 py-4 text-sm">${modelHtml}</td>
+                        <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
+                    `;
+                }
+                
+                rowHTML += actionCol + `</tr>`;
+                tbody.innerHTML += rowHTML;
             });
         }
 
@@ -1264,16 +1431,22 @@
                 return;
             }
 
+            const actionFilterEl = document.getElementById('filter-log-action');
+            const actionFilter = actionFilterEl ? actionFilterEl.value : 'maintain';
+
             const exportData = currentFilteredLogs.map(l => {
                 const m = machines.find(mac => mac.id === l.machineId);
-                return {
-                    '日期': l.date,
-                    '機台類型': m ? m.type : '-',
-                    '機台名稱': m ? m.name : '已刪除機台',
-                    '作業類型': l.type === 'maintain' ? '保養' : '清潔',
-                    '清潔後起始批號': l.batchNo || '',
-                    '備註說明': l.notes || ''
-                };
+                const mName = m ? m.name : '已刪除機台';
+                const mType = m ? m.type : '-';
+                
+                // 根據當下查詢的類別，產生完美對應的 Excel 欄位格式
+                if (actionFilter === 'maintain') {
+                    return { '日期': l.date, '類型': mType, '機台': mName, '作業': '保養', '備註': l.notes || '' };
+                } else if (actionFilter === 'clean') {
+                    return { '日期': l.date, '類型': mType, '機台': mName, '作業': '清潔', '清潔後起始批號': l.batchNo || '', '備註': l.notes || '' };
+                } else {
+                    return { '開始日期': l.startDate || '', '完成日期': l.date || '', '類型': mType, '機台': mName, '作業': '調機', '型號': `${l.startModel || ''}➔${l.endModel || ''}`, '備註': l.notes || '' };
+                }
             });
 
             try {
@@ -1366,8 +1539,22 @@
             document.getElementById('edit-log-date').value = log.date;
             
             const batchGroup = document.getElementById('edit-log-batch-group');
-            batchGroup.classList.remove('hidden');
-            document.getElementById('edit-log-batch').value = log.batchNo || '';
+            const adjustGroup = document.getElementById('edit-log-adjust-group');
+            
+            if (log.type === 'clean') {
+                batchGroup.classList.remove('hidden');
+                adjustGroup.classList.add('hidden');
+                document.getElementById('edit-log-batch').value = log.batchNo || '';
+            } else if (log.type === 'adjust') {
+                batchGroup.classList.add('hidden');
+                adjustGroup.classList.remove('hidden');
+                document.getElementById('edit-log-start-date').value = log.startDate || '';
+                document.getElementById('edit-log-start-model').value = log.startModel || '';
+                document.getElementById('edit-log-end-model').value = log.endModel || '';
+            } else {
+                batchGroup.classList.add('hidden');
+                adjustGroup.classList.add('hidden');
+            }
             
             document.getElementById('edit-log-notes').value = log.notes || '';
             document.getElementById('edit-log-modal').classList.remove('hidden');
@@ -1381,7 +1568,13 @@
             const log = logs.find(l => l.id === logId);
             if(log) {
                 log.date = document.getElementById('edit-log-date').value;
-                log.batchNo = document.getElementById('edit-log-batch').value;
+                if (log.type === 'clean') {
+                    log.batchNo = document.getElementById('edit-log-batch').value;
+                } else if (log.type === 'adjust') {
+                    log.startDate = document.getElementById('edit-log-start-date').value;
+                    log.startModel = document.getElementById('edit-log-start-model').value;
+                    log.endModel = document.getElementById('edit-log-end-model').value;
+                }
                 log.notes = document.getElementById('edit-log-notes').value;
                 await saveData();
                 renderLogs();
@@ -1402,20 +1595,41 @@
             document.getElementById('action-notes').value = '';
 
             const isClean = type === 'clean';
-            document.getElementById('action-modal-title').textContent = isClean ? '執行清潔作業' : '執行保養作業';
-            document.getElementById('action-completion-date-label').innerHTML = (isClean ? '清潔完成日期' : '保養完成日期') + ' <span class="text-red-500">*</span>';
+            const isAdjust = type === 'adjust';
+            
+            let titleStr = '執行保養作業';
+            if (isClean) titleStr = '執行清潔作業';
+            if (isAdjust) titleStr = '執行調機作業';
+            
+            document.getElementById('action-modal-title').textContent = titleStr;
+            document.getElementById('action-completion-date-label').innerHTML = titleStr.replace('執行', '').replace('作業', '') + '完成日期 <span class="text-red-500">*</span>';
             document.getElementById('action-completion-date').value = getToday();
             
             const batchGroup = document.getElementById('batch-input-group');
             const batchInput = document.getElementById('action-batch-no');
+            const adjustGroup = document.getElementById('adjust-input-group');
+            const adjustInputs = ['action-start-date', 'action-start-model', 'action-end-model'];
             
             if (isClean) {
                 batchGroup.classList.remove('hidden');
                 batchInput.required = true;
                 batchInput.value = ''; 
+                adjustGroup.classList.add('hidden');
+                adjustInputs.forEach(id => document.getElementById(id).required = false);
+            } else if (isAdjust) {
+                batchGroup.classList.add('hidden');
+                batchInput.required = false;
+                adjustGroup.classList.remove('hidden');
+                adjustInputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    el.required = true;
+                    el.value = '';
+                });
             } else {
                 batchGroup.classList.add('hidden');
                 batchInput.required = false;
+                adjustGroup.classList.add('hidden');
+                adjustInputs.forEach(id => document.getElementById(id).required = false);
             }
 
             document.getElementById('action-modal').classList.remove('hidden');
@@ -1426,8 +1640,11 @@
         function submitAction(e) {
             e.preventDefault();
             const type = document.getElementById('action-type').value;
-            const isClean = type === 'clean';
-            document.getElementById('confirm-action-title').textContent = isClean ? '清潔完成' : '保養完成';
+            let titleStr = '保養完成';
+            if (type === 'clean') titleStr = '清潔完成';
+            if (type === 'adjust') titleStr = '調機完成';
+            
+            document.getElementById('confirm-action-title').textContent = titleStr;
             document.getElementById('confirm-action-modal').classList.remove('hidden');
         }
 
@@ -1440,17 +1657,29 @@
             const type = document.getElementById('action-type').value;
             const actionDate = document.getElementById('action-date').value;
             const date = document.getElementById('action-completion-date').value || getToday(); 
-            const batchNo = document.getElementById('action-batch-no').value;
             const notes = document.getElementById('action-notes').value;
 
-            logs.push({ id: Date.now(), machineId, type, date, batchNo: type === 'clean' ? batchNo : '', notes });
+            let logEntry = { id: Date.now(), machineId, type, date, notes };
+            
+            if (type === 'clean') {
+                logEntry.batchNo = document.getElementById('action-batch-no').value;
+            } else if (type === 'adjust') {
+                logEntry.startDate = document.getElementById('action-start-date').value;
+                logEntry.startModel = document.getElementById('action-start-model').value;
+                logEntry.endModel = document.getElementById('action-end-model').value;
+            }
+            
+            logs.push(logEntry);
 
             const mIndex = machines.findIndex(m => m.id === machineId);
             if (mIndex > -1) {
                 ensureArrays(machines[mIndex]); // 防呆
                 if (type === 'clean') { 
                     machines[mIndex].nextClean = machines[mIndex].nextClean.filter(d => d !== actionDate);
-                    machines[mIndex].batchNo = batchNo; 
+                    machines[mIndex].batchNo = logEntry.batchNo; 
+                }
+                else if (type === 'adjust') { 
+                    machines[mIndex].nextAdj = machines[mIndex].nextAdj.filter(d => d !== actionDate);
                 }
                 else { 
                     machines[mIndex].nextMaint = machines[mIndex].nextMaint.filter(d => d !== actionDate);
@@ -1460,10 +1689,13 @@
             await saveData();
             closeConfirmActionModal();
             closeActionModal();
-            showToast(`${type === 'clean' ? '清潔' : '保養'}紀錄已成功儲存！`);
+            
+            const actionName = type === 'clean' ? '清潔' : (type === 'adjust' ? '調機' : '保養');
+            showToast(`${actionName}紀錄已成功儲存！`);
             
             if (!document.getElementById('view-maintenance').classList.contains('hidden')) renderMaintenance();
             if (!document.getElementById('view-cleaning').classList.contains('hidden')) renderCleaning();
+            if (!document.getElementById('view-adjustment').classList.contains('hidden')) renderAdjustment();
         }
 
         async function deleteSchedule() {
@@ -1472,9 +1704,12 @@
             const actionDate = document.getElementById('action-date').value;
             const m = machines.find(mac => mac.id === machineId);
             
-            if (m && confirm(`確定要刪除此${type === 'clean' ? '清潔' : '保養'}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
+            const actionName = type === 'clean' ? '清潔' : (type === 'adjust' ? '調機' : '保養');
+            
+            if (m && confirm(`確定要刪除此${actionName}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
                 ensureArrays(m); // 防呆
                 if (type === 'clean') m.nextClean = m.nextClean.filter(d => d !== actionDate);
+                else if (type === 'adjust') m.nextAdj = m.nextAdj.filter(d => d !== actionDate);
                 else m.nextMaint = m.nextMaint.filter(d => d !== actionDate);
                 
                 await saveData();
@@ -1483,6 +1718,7 @@
                 
                 if (!document.getElementById('view-maintenance').classList.contains('hidden')) renderMaintenance();
                 if (!document.getElementById('view-cleaning').classList.contains('hidden')) renderCleaning();
+                if (!document.getElementById('view-adjustment').classList.contains('hidden')) renderAdjustment();
             }
         }
 
@@ -1490,8 +1726,8 @@
         function confirmReschedule(machineId, type, date) {
             rescheduleTarget = { machineId, type, date };
             const m = machines.find(mac => mac.id === machineId);
-            const actionStr = type === 'maintain' ? '保養' : '清潔';
-            const colorClass = type === 'maintain' ? 'text-orange-600' : 'text-teal-600';
+            const actionStr = type === 'maintain' ? '保養' : (type === 'clean' ? '清潔' : '調機');
+            const colorClass = type === 'maintain' ? 'text-orange-600' : (type === 'clean' ? 'text-teal-600' : 'text-indigo-600');
             
             document.getElementById('reschedule-text').innerHTML = `確定要為「<span class="font-bold text-gray-800">${m.name}</span>」<span class="${colorClass} font-bold">新增${actionStr}排程</span>於 <br><span class="font-bold text-lg mt-2 inline-block">${date}</span> 嗎？`;
             document.getElementById('reschedule-modal').classList.remove('hidden');
@@ -1506,29 +1742,35 @@
                 // 強制雙重確認格式為陣列，防止任何舊資料或例外狀況導致 push 失敗
                 ensureArrays(m);
 
-                if (rescheduleTarget.type === 'maintain' && m.nextClean.includes(rescheduleTarget.date)) {
-                    showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
-                    closeRescheduleModal();
-                    return;
-                }
-                if (rescheduleTarget.type === 'clean' && m.nextMaint.includes(rescheduleTarget.date)) {
-                    showToast('衝突錯誤：同一天不可同時安排保養與清潔！', 'error');
+                // 檢查是否與其他排程衝突
+                const isMaintain = rescheduleTarget.type === 'maintain';
+                const isClean = rescheduleTarget.type === 'clean';
+                const isAdj = rescheduleTarget.type === 'adjust';
+                const d = rescheduleTarget.date;
+                
+                if ((isMaintain && (m.nextClean.includes(d) || m.nextAdj.includes(d))) ||
+                    (isClean && (m.nextMaint.includes(d) || m.nextAdj.includes(d))) ||
+                    (isAdj && (m.nextMaint.includes(d) || m.nextClean.includes(d)))) {
+                    showToast('衝突錯誤：同一天不可同時安排多種排程！', 'error');
                     closeRescheduleModal();
                     return;
                 }
 
                 // 新增日期至排程陣列
-                if (rescheduleTarget.type === 'maintain') {
-                    if (!m.nextMaint.includes(rescheduleTarget.date)) m.nextMaint.push(rescheduleTarget.date);
+                if (isMaintain) {
+                    if (!m.nextMaint.includes(d)) m.nextMaint.push(d);
+                } else if (isClean) {
+                    if (!m.nextClean.includes(d)) m.nextClean.push(d);
                 } else {
-                    if (!m.nextClean.includes(rescheduleTarget.date)) m.nextClean.push(rescheduleTarget.date);
+                    if (!m.nextAdj.includes(d)) m.nextAdj.push(d);
                 }
                 
                 try {
                     await saveData();
-                    showToast(`排程已成功調整至 ${rescheduleTarget.date}`, 'success');
-                    if (rescheduleTarget.type === 'maintain') renderMaintenance();
-                    else renderCleaning();
+                    showToast(`排程已成功調整至 ${d}`, 'success');
+                    if (isMaintain) renderMaintenance();
+                    else if (isClean) renderCleaning();
+                    else renderAdjustment();
                 } catch(e) {
                     console.error('儲存排程失敗', e);
                     showToast('儲存失敗，請確認網路狀態', 'error');
@@ -1539,12 +1781,17 @@
 
         // --- Action: Clear Current Week ---
         async function clearCurrentWeek(type) {
-            const isMaintain = type === 'maintain';
-            const actionStr = isMaintain ? '保養' : '清潔';
-            const filterId = isMaintain ? 'maint-type-filter' : 'clean-type-filter';
-            const filterType = document.getElementById(filterId).value;
+            let actionStr = '保養';
+            let filterId = 'maint-type-filter';
+            let weekStart = currentMaintWeek;
             
-            const weekStart = isMaintain ? currentMaintWeek : currentCleanWeek;
+            if (type === 'clean') {
+                actionStr = '清潔'; filterId = 'clean-type-filter'; weekStart = currentCleanWeek;
+            } else if (type === 'adjust') {
+                actionStr = '調機'; filterId = 'adj-type-filter'; weekStart = currentAdjWeek;
+            }
+            
+            const filterType = document.getElementById(filterId).value;
             const weekDays = getWeekDays(weekStart);
             
             if (confirm(`確定要清除畫面上【當週 (${weekDays[0].replace(/-/g, '/')} ~ ${weekDays[6].replace(/-/g, '/')})】的所有${actionStr}預排嗎？\n(注意：只會清除目前篩選條件下顯示的預排)`)) {
@@ -1554,21 +1801,26 @@
                     if (filterType !== 'all' && m.type !== filterType) return;
                     ensureArrays(m); // 防呆
                     
-                    if (isMaintain) {
+                    if (type === 'maintain') {
                         const originalLength = m.nextMaint.length;
                         m.nextMaint = m.nextMaint.filter(d => !weekDays.includes(d));
                         if (originalLength !== m.nextMaint.length) clearedCount++;
-                    } else {
+                    } else if (type === 'clean') {
                         const originalLength = m.nextClean.length;
                         m.nextClean = m.nextClean.filter(d => !weekDays.includes(d));
                         if (originalLength !== m.nextClean.length) clearedCount++;
+                    } else if (type === 'adjust') {
+                        const originalLength = m.nextAdj.length;
+                        m.nextAdj = m.nextAdj.filter(d => !weekDays.includes(d));
+                        if (originalLength !== m.nextAdj.length) clearedCount++;
                     }
                 });
                 
                 if (clearedCount > 0) {
                     await saveData();
-                    if (isMaintain) renderMaintenance();
-                    else renderCleaning();
+                    if (type === 'maintain') renderMaintenance();
+                    else if (type === 'clean') renderCleaning();
+                    else renderAdjustment();
                     showToast(`已成功清除 ${clearedCount} 筆當週預排`, 'success');
                 } else {
                     showToast(`當週畫面中無任何預排可清除`, 'error');
@@ -1638,6 +1890,7 @@
             } else {
                 renderMaintenance();
                 renderCleaning();
+                renderAdjustment();
                 if (!document.getElementById('view-logs').classList.contains('hidden')) renderLogs();
             }
         }
