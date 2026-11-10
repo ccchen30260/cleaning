@@ -176,18 +176,10 @@
                 </div>
 
                 <!-- Charts -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">機台狀態分佈</h3>
-                        <div class="relative h-64 w-full">
-                            <canvas id="statusChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">本月作業次數統計</h3>
-                        <div class="relative h-64 w-full">
-                            <canvas id="activityChart"></canvas>
-                        </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">本月作業次數統計</h3>
+                    <div class="relative h-80 md:h-[450px] w-full">
+                        <canvas id="activityChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -788,7 +780,7 @@
         }
         
         let currentRole = null;
-        let charts = { status: null, activity: null };
+        let charts = { activity: null };
         let currentMaintWeek = getMonday(new Date());
         let currentCleanWeek = getMonday(new Date());
         let currentAdjWeek = getMonday(new Date());
@@ -908,31 +900,18 @@
             document.getElementById('stat-total-machines').textContent = machines.length;
             
             const today = getToday();
-            let urgentMaint = 0, urgentClean = 0, urgentAdj = 0, normalCount = 0;
+            let urgentMaint = 0, urgentClean = 0, urgentAdj = 0;
 
             machines.forEach(m => {
                 ensureArrays(m);
-                let mDanger = false, cDanger = false, aDanger = false;
-                if (m.nextMaint.some(d => d <= today)) { urgentMaint++; mDanger = true; }
-                if (m.nextClean.some(d => d <= today)) { urgentClean++; cDanger = true; }
-                if (m.nextAdj.some(a => a.date <= today)) { urgentAdj++; aDanger = true; }
-                if (!mDanger && !cDanger && !aDanger) normalCount++;
+                if (m.nextMaint.some(d => d <= today)) urgentMaint++;
+                if (m.nextClean.some(d => d <= today)) urgentClean++;
+                if (m.nextAdj.some(a => a.date <= today)) urgentAdj++;
             });
 
             document.getElementById('stat-urgent-maint').textContent = urgentMaint;
             document.getElementById('stat-urgent-clean').textContent = urgentClean;
             document.getElementById('stat-urgent-adj').textContent = urgentAdj;
-
-            if (charts.status) charts.status.destroy();
-            const ctxStatus = document.getElementById('statusChart').getContext('2d');
-            charts.status = new Chart(ctxStatus, {
-                type: 'doughnut',
-                data: {
-                    labels: ['正常', '需保養', '需清潔', '需調機'],
-                    datasets: [{ data: [normalCount, urgentMaint, urgentClean, urgentAdj], backgroundColor: ['#10B981', '#F97316', '#14B8A6', '#6366F1'], borderWidth: 0 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
-            });
 
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
