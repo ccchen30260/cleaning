@@ -729,6 +729,13 @@
                 if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
                 if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
                 if (!Array.isArray(m.nextAdj)) m.nextAdj = m.nextAdj ? [m.nextAdj] : [];
+                
+                // 將調機排程字串強制轉換為物件格式
+                m.nextAdj = m.nextAdj.map(adj => {
+                    if (typeof adj === 'string') return { date: adj, startModel: '', endModel: '' };
+                    return adj;
+                });
+                
                 return m;
             });
         }
@@ -739,6 +746,10 @@
             if (!Array.isArray(m.nextMaint)) m.nextMaint = m.nextMaint ? [m.nextMaint] : [];
             if (!Array.isArray(m.nextClean)) m.nextClean = m.nextClean ? [m.nextClean] : [];
             if (!Array.isArray(m.nextAdj)) m.nextAdj = m.nextAdj ? [m.nextAdj] : [];
+            m.nextAdj = m.nextAdj.map(adj => {
+                if (typeof adj === 'string') return { date: adj, startModel: '', endModel: '' };
+                return adj;
+            });
         }
 
         let machineTypes = JSON.parse(localStorage.getItem('sys_types')) || DEFAULT_TYPES;
@@ -877,7 +888,7 @@
                 let mDanger = false, cDanger = false, aDanger = false;
                 if (m.nextMaint.some(d => d <= today)) { urgentMaint++; mDanger = true; }
                 if (m.nextClean.some(d => d <= today)) { urgentClean++; cDanger = true; }
-                if (m.nextAdj.some(d => d <= today)) { urgentAdj++; aDanger = true; }
+                if (m.nextAdj.some(a => a.date <= today)) { urgentAdj++; aDanger = true; }
                 if (!mDanger && !cDanger && !aDanger) normalCount++;
             });
 
@@ -950,9 +961,9 @@
                 else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
                 else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
                 
-                if (m.nextAdj.includes(today)) upcomingData.today.adj.push(m);
-                else if (m.nextAdj.includes(tomorrow)) upcomingData.tomorrow.adj.push(m);
-                else if (m.nextAdj.includes(dayAfterTomorrow)) upcomingData.dayAfter.adj.push(m);
+                if (m.nextAdj.some(a => a.date === today)) upcomingData.today.adj.push(m);
+                else if (m.nextAdj.some(a => a.date === tomorrow)) upcomingData.tomorrow.adj.push(m);
+                else if (m.nextAdj.some(a => a.date === dayAfterTomorrow)) upcomingData.dayAfter.adj.push(m);
             });
 
             let upcomingHTML = '';
@@ -1114,7 +1125,7 @@
                 const m = machines.find(mac => mac.id === id);
                 if (m) { m.type = type; m.name = name; }
             } else {
-                machines.push({ id: generateId(), type, name, nextMaint: [], nextClean: [], batchNo: '' });
+                machines.push({ id: generateId(), type, name, nextMaint: [], nextClean: [], nextAdj: [], batchNo: '' });
             }
             await saveData();
             closeMachineSettingModal();
@@ -1183,7 +1194,7 @@
                 displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextClean.some(d => weekDays.includes(d)); });
             }
             if (renderType === 'adjust' && showOnlyPendingAdj) {
-                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextAdj.some(d => weekDays.includes(d)); });
+                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextAdj.some(a => weekDays.includes(a.date)); });
             }
 
             const thead = document.getElementById(theadId);
@@ -1206,7 +1217,7 @@
             displayMachines.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 
             displayMachines.forEach(m => {
-                ensureArrays(m); // 繪製前強制防護
+                ensureArrays(m);
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50 transition-colors";
                 
@@ -1222,11 +1233,16 @@
                 weekDays.forEach(day => {
                     const isToday = day === getToday();
                     const bgClass = isToday ? 'bg-blue-50/30' : '';
-                    const targetDates = renderType === 'maintain' ? m.nextMaint : (renderType === 'clean' ? m.nextClean : m.nextAdj);
                     const actionFn = `openActionModal('${m.id}', '${renderType}', '${day}')`;
                     const isAdmin = currentRole === 'admin';
                     
-                    if (targetDates.includes(day)) {
+                    // 判斷當天是否有預排
+                    let hasTask = false;
+                    if (renderType === 'maintain') hasTask = m.nextMaint.includes(day);
+                    else if (renderType === 'clean') hasTask = m.nextClean.includes(day);
+                    else if (renderType === 'adjust') hasTask = m.nextAdj.some(a => a.date === day);
+
+                    if (hasTask) {
                         let styleCls, text;
                         if (renderType === 'maintain') {
                             styleCls = 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700';
@@ -1638,8 +1654,18 @@
                 adjustInputs.forEach(id => {
                     const el = document.getElementById(id);
                     el.required = true;
-                    el.value = '';
+                    el.value = ''; // 先清空
                 });
+                
+                // 帶入原本排程填寫的型號資料
+                const adjData = m.nextAdj.find(a => a.date === date);
+                if (adjData) {
+                    document.getElementById('action-start-model').value = adjData.startModel || '';
+                    document.getElementById('action-end-model').value = adjData.endModel || '';
+                    document.getElementById('action-start-date').value = adjData.date || date;
+                } else {
+                    document.getElementById('action-start-date').value = date;
+                }
             } else {
                 batchGroup.classList.add('hidden');
                 batchInput.required = false;
@@ -1688,13 +1714,13 @@
 
             const mIndex = machines.findIndex(m => m.id === machineId);
             if (mIndex > -1) {
-                ensureArrays(machines[mIndex]); // 防呆
+                ensureArrays(machines[mIndex]);
                 if (type === 'clean') { 
                     machines[mIndex].nextClean = machines[mIndex].nextClean.filter(d => d !== actionDate);
                     machines[mIndex].batchNo = logEntry.batchNo; 
                 }
                 else if (type === 'adjust') { 
-                    machines[mIndex].nextAdj = machines[mIndex].nextAdj.filter(d => d !== actionDate);
+                    machines[mIndex].nextAdj = machines[mIndex].nextAdj.filter(a => a.date !== actionDate);
                 }
                 else { 
                     machines[mIndex].nextMaint = machines[mIndex].nextMaint.filter(d => d !== actionDate);
@@ -1724,7 +1750,7 @@
             if (m && confirm(`確定要刪除此${actionName}預排嗎？\n(後續仍可點選排程表空白處重新排定)`)) {
                 ensureArrays(m); // 防呆
                 if (type === 'clean') m.nextClean = m.nextClean.filter(d => d !== actionDate);
-                else if (type === 'adjust') m.nextAdj = m.nextAdj.filter(d => d !== actionDate);
+                else if (type === 'adjust') m.nextAdj = m.nextAdj.filter(a => a.date !== actionDate);
                 else m.nextMaint = m.nextMaint.filter(d => d !== actionDate);
                 
                 await saveData();
@@ -1829,7 +1855,7 @@
                 
                 machines.forEach(m => {
                     if (filterType !== 'all' && m.type !== filterType) return;
-                    ensureArrays(m); // 防呆
+                    ensureArrays(m);
                     
                     if (type === 'maintain') {
                         const originalLength = m.nextMaint.length;
