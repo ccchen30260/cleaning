@@ -1645,17 +1645,12 @@
             const notesGroup = document.getElementById('action-notes').parentElement;
             const completionDateInput = document.getElementById('action-completion-date');
             
-            if (isAdjust) {
-                completionDateGroup.classList.add('hidden');
-                notesGroup.classList.add('hidden');
-                completionDateInput.required = false;
-            } else {
-                completionDateGroup.classList.remove('hidden');
-                notesGroup.classList.remove('hidden');
-                completionDateInput.required = true;
-                document.getElementById('action-completion-date-label').innerHTML = titleStr.replace('執行', '').replace('作業', '') + '完成日期 <span class="text-red-500">*</span>';
-                completionDateInput.value = getToday();
-            }
+            // 重置顯示狀態，全部先顯示出來
+            completionDateGroup.classList.remove('hidden');
+            notesGroup.classList.remove('hidden');
+            completionDateInput.required = true;
+            document.getElementById('action-completion-date-label').innerHTML = titleStr.replace('執行', '').replace('作業', '') + '完成日期 <span class="text-red-500">*</span>';
+            completionDateInput.value = getToday();
             
             const batchGroup = document.getElementById('batch-input-group');
             const batchInput = document.getElementById('action-batch-no');
@@ -1669,23 +1664,12 @@
                 adjustGroup.classList.add('hidden');
                 adjustInputs.forEach(id => document.getElementById(id).required = false);
             } else if (isAdjust) {
+                // 調機作業：隱藏開始日期/型號等輸入群組，只需填寫完成日期與備註
                 batchGroup.classList.add('hidden');
                 batchInput.required = false;
-                adjustGroup.classList.remove('hidden');
-                adjustInputs.forEach(id => {
-                    const el = document.getElementById(id);
-                    el.required = true;
-                    el.value = '';
-                });
                 
-                const adjData = m.nextAdj.find(a => a.date === date);
-                if (adjData) {
-                    document.getElementById('action-start-model').value = adjData.startModel || '';
-                    document.getElementById('action-end-model').value = adjData.endModel || '';
-                    document.getElementById('action-start-date').value = adjData.date || date;
-                } else {
-                    document.getElementById('action-start-date').value = date;
-                }
+                adjustGroup.classList.add('hidden');
+                adjustInputs.forEach(id => document.getElementById(id).required = false);
             } else {
                 batchGroup.classList.add('hidden');
                 batchInput.required = false;
@@ -1718,23 +1702,20 @@
             const type = document.getElementById('action-type').value;
             const actionDate = document.getElementById('action-date').value;
             
-            let date, notes;
-            if (type === 'adjust') {
-                date = actionDate;
-                notes = '';
-            } else {
-                date = document.getElementById('action-completion-date').value || getToday(); 
-                notes = document.getElementById('action-notes').value;
-            }
+            const date = document.getElementById('action-completion-date').value || getToday(); 
+            const notes = document.getElementById('action-notes').value;
 
             let logEntry = { id: Date.now(), machineId, type, date, notes };
             
             if (type === 'clean') {
                 logEntry.batchNo = document.getElementById('action-batch-no').value;
             } else if (type === 'adjust') {
-                logEntry.startDate = document.getElementById('action-start-date').value;
-                logEntry.startModel = document.getElementById('action-start-model').value;
-                logEntry.endModel = document.getElementById('action-end-model').value;
+                // 從排程中取得原本填寫的型號
+                const m = machines.find(mac => mac.id === machineId);
+                const adjData = m ? m.nextAdj.find(a => a.date === actionDate) : null;
+                logEntry.startDate = actionDate; // 預設開始日期為排程日
+                logEntry.startModel = adjData ? adjData.startModel : '';
+                logEntry.endModel = adjData ? adjData.endModel : '';
             }
             
             logs.push(logEntry);
