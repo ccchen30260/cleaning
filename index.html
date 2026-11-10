@@ -1243,7 +1243,7 @@
                     else if (renderType === 'adjust') hasTask = m.nextAdj.some(a => a.date === day);
 
                     if (hasTask) {
-                        let styleCls, text;
+                        let styleCls, text, subText = '';
                         if (renderType === 'maintain') {
                             styleCls = 'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-700';
                             text = '保養預排';
@@ -1253,6 +1253,12 @@
                         } else {
                             styleCls = 'bg-indigo-100 hover:bg-indigo-200 border-indigo-200 text-indigo-800';
                             text = '調機預排';
+                            const adjData = m.nextAdj.find(a => a.date === day);
+                            if (adjData) {
+                                const sm = adjData.startModel || '?';
+                                const em = adjData.endModel || '?';
+                                subText = `<div class="text-xs font-normal mt-1 text-indigo-600">${sm} ➔ ${em}</div>`;
+                            }
                         }
 
                         const cursorCls = isAdmin ? 'cursor-pointer hover:scale-105 shadow-sm' : 'opacity-80';
@@ -1261,9 +1267,10 @@
                         rowHTML += `
                             <td class="border-b border-r p-2 text-center align-middle ${bgClass}">
                                 <div ${clickAttr} 
-                                     class="border rounded-lg py-3 px-1 text-sm font-bold transition-transform ${styleCls} ${cursorCls}"
+                                     class="border rounded-lg py-2 px-1 transition-transform ${styleCls} ${cursorCls}"
                                      title="${isAdmin ? '點擊填寫紀錄與設定下次排程' : '預定排程'}">
-                                    ${text}
+                                    <div class="text-sm font-bold">${text}</div>
+                                    ${subText}
                                 </div>
                             </td>`;
                     } else {
@@ -1633,8 +1640,22 @@
             if (isAdjust) titleStr = '執行調機作業';
             
             document.getElementById('action-modal-title').textContent = titleStr;
-            document.getElementById('action-completion-date-label').innerHTML = titleStr.replace('執行', '').replace('作業', '') + '完成日期 <span class="text-red-500">*</span>';
-            document.getElementById('action-completion-date').value = getToday();
+            
+            const completionDateGroup = document.getElementById('action-completion-date').parentElement;
+            const notesGroup = document.getElementById('action-notes').parentElement;
+            const completionDateInput = document.getElementById('action-completion-date');
+            
+            if (isAdjust) {
+                completionDateGroup.classList.add('hidden');
+                notesGroup.classList.add('hidden');
+                completionDateInput.required = false;
+            } else {
+                completionDateGroup.classList.remove('hidden');
+                notesGroup.classList.remove('hidden');
+                completionDateInput.required = true;
+                document.getElementById('action-completion-date-label').innerHTML = titleStr.replace('執行', '').replace('作業', '') + '完成日期 <span class="text-red-500">*</span>';
+                completionDateInput.value = getToday();
+            }
             
             const batchGroup = document.getElementById('batch-input-group');
             const batchInput = document.getElementById('action-batch-no');
@@ -1654,10 +1675,9 @@
                 adjustInputs.forEach(id => {
                     const el = document.getElementById(id);
                     el.required = true;
-                    el.value = ''; // 先清空
+                    el.value = '';
                 });
                 
-                // 帶入原本排程填寫的型號資料
                 const adjData = m.nextAdj.find(a => a.date === date);
                 if (adjData) {
                     document.getElementById('action-start-model').value = adjData.startModel || '';
@@ -1697,8 +1717,15 @@
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
             const actionDate = document.getElementById('action-date').value;
-            const date = document.getElementById('action-completion-date').value || getToday(); 
-            const notes = document.getElementById('action-notes').value;
+            
+            let date, notes;
+            if (type === 'adjust') {
+                date = actionDate;
+                notes = '';
+            } else {
+                date = document.getElementById('action-completion-date').value || getToday(); 
+                notes = document.getElementById('action-notes').value;
+            }
 
             let logEntry = { id: Date.now(), machineId, type, date, notes };
             
