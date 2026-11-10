@@ -541,7 +541,22 @@
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
             </div>
             <h3 class="text-lg font-bold text-gray-800 mb-2">調整排程確認</h3>
-            <p id="reschedule-text" class="text-sm text-gray-600 mb-6">確定要調整排程嗎？</p>
+            <p id="reschedule-text" class="text-sm text-gray-600 mb-4">確定要調整排程嗎？</p>
+            
+            <!-- 加入調機專用的輸入框 -->
+            <div id="reschedule-adj-inputs" class="hidden mb-6 text-left space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-indigo-700 mb-1">開始型號</label>
+                        <input type="text" id="reschedule-start-model" placeholder="原機台型號" class="w-full border border-indigo-300 bg-indigo-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-indigo-700 mb-1">調整後型號</label>
+                        <input type="text" id="reschedule-end-model" placeholder="調機後型號" class="w-full border border-indigo-300 bg-indigo-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                    </div>
+                </div>
+            </div>
+
             <div class="flex justify-center space-x-3">
                 <button onclick="closeRescheduleModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium transition-colors">取消</button>
                 <button onclick="executeReschedule()" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors">確認調整</button>
@@ -1730,6 +1745,16 @@
             const colorClass = type === 'maintain' ? 'text-orange-600' : (type === 'clean' ? 'text-teal-600' : 'text-indigo-600');
             
             document.getElementById('reschedule-text').innerHTML = `確定要為「<span class="font-bold text-gray-800">${m.name}</span>」<span class="${colorClass} font-bold">新增${actionStr}排程</span>於 <br><span class="font-bold text-lg mt-2 inline-block">${date}</span> 嗎？`;
+            
+            const adjInputs = document.getElementById('reschedule-adj-inputs');
+            if (type === 'adjust') {
+                adjInputs.classList.remove('hidden');
+                document.getElementById('reschedule-start-model').value = '';
+                document.getElementById('reschedule-end-model').value = '';
+            } else {
+                adjInputs.classList.add('hidden');
+            }
+            
             document.getElementById('reschedule-modal').classList.remove('hidden');
         }
 
@@ -1747,9 +1772,10 @@
                 const isClean = rescheduleTarget.type === 'clean';
                 const isAdj = rescheduleTarget.type === 'adjust';
                 const d = rescheduleTarget.date;
+                const adjDates = m.nextAdj.map(a => a.date);
                 
-                if ((isMaintain && (m.nextClean.includes(d) || m.nextAdj.includes(d))) ||
-                    (isClean && (m.nextMaint.includes(d) || m.nextAdj.includes(d))) ||
+                if ((isMaintain && (m.nextClean.includes(d) || adjDates.includes(d))) ||
+                    (isClean && (m.nextMaint.includes(d) || adjDates.includes(d))) ||
                     (isAdj && (m.nextMaint.includes(d) || m.nextClean.includes(d)))) {
                     showToast('衝突錯誤：同一天不可同時安排多種排程！', 'error');
                     closeRescheduleModal();
@@ -1762,7 +1788,11 @@
                 } else if (isClean) {
                     if (!m.nextClean.includes(d)) m.nextClean.push(d);
                 } else {
-                    if (!m.nextAdj.includes(d)) m.nextAdj.push(d);
+                    if (!adjDates.includes(d)) {
+                        const sm = document.getElementById('reschedule-start-model').value.trim();
+                        const em = document.getElementById('reschedule-end-model').value.trim();
+                        m.nextAdj.push({ date: d, startModel: sm, endModel: em });
+                    }
                 }
                 
                 try {
@@ -1811,7 +1841,7 @@
                         if (originalLength !== m.nextClean.length) clearedCount++;
                     } else if (type === 'adjust') {
                         const originalLength = m.nextAdj.length;
-                        m.nextAdj = m.nextAdj.filter(d => !weekDays.includes(d));
+                        m.nextAdj = m.nextAdj.filter(a => !weekDays.includes(a.date));
                         if (originalLength !== m.nextAdj.length) clearedCount++;
                     }
                 });
