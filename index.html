@@ -850,6 +850,46 @@
             }
         }
 
+        // 新增：自動順延過期調機排程
+        async function autoRollForwardAdjustments() {
+            const todayStr = getToday();
+            let hasChanged = false;
+            
+            machines.forEach(m => {
+                ensureArrays(m);
+                m.nextAdj.forEach((adj, i) => {
+                    if (adj.date < todayStr) {
+                        let d = new Date(adj.date);
+                        let newDateStr = adj.date;
+                        
+                        // 一直 +1 天，直到 >= 今天，且不與其他排程衝突
+                        while (newDateStr < todayStr) {
+                            d.setDate(d.getDate() + 1);
+                            newDateStr = d.toISOString().split('T')[0];
+                        }
+                        
+                        // 檢查衝突 (如果順延到的那天已經有保養/清潔/其他調機，再繼續往後延)
+                        let hasConflict = true;
+                        while (hasConflict) {
+                            hasConflict = false;
+                            if (m.nextMaint.includes(newDateStr) || m.nextClean.includes(newDateStr) || m.nextAdj.some((a, idx) => idx !== i && a.date === newDateStr)) {
+                                hasConflict = true;
+                                d.setDate(d.getDate() + 1);
+                                newDateStr = d.toISOString().split('T')[0];
+                            }
+                        }
+                        
+                        adj.date = newDateStr;
+                        hasChanged = true;
+                    }
+                });
+            });
+            
+            if (hasChanged) {
+                await saveData();
+            }
+        }
+
         function populateGlobalTypeFilters() {
             const filters = ['maint-type-filter', 'clean-type-filter', 'adj-type-filter', 'filter-log-type', 'settings-machine-type-filter'];
             filters.forEach(id => {
@@ -870,7 +910,7 @@
         }
 
         // --- Navigation ---
-        function switchTab(tabId) {
+        async function switchTab(tabId) {
             document.querySelectorAll('main > div > div[id^="view-"]').forEach(el => el.classList.add('hidden'));
             document.getElementById(`view-${tabId}`).classList.remove('hidden');
             
@@ -888,7 +928,10 @@
             if(tabId === 'settings') renderSettings();
             if(tabId === 'maintenance') renderMaintenance();
             if(tabId === 'cleaning') renderCleaning();
-            if(tabId === 'adjustment') renderAdjustment();
+            if(tabId === 'adjustment') {
+                await autoRollForwardAdjustments(); // 切換到調機頁面時，自動檢查並順延
+                renderAdjustment();
+            }
             if(tabId === 'logs') {
                 populateGlobalTypeFilters();
                 renderLogs();
@@ -2030,6 +2073,9 @@
         window.onload = async () => {
             if (SUPABASE_URL) await loadDataFromCloud();
             
+            // 初始化時也執行一次自動順延
+            await autoRollForwardAdjustments();
+
             const loadingOverlay = document.getElementById('loading-overlay');
             loadingOverlay.style.opacity = '0';
             setTimeout(() => {
