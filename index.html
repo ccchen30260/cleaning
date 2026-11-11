@@ -850,46 +850,6 @@
             }
         }
 
-        // 新增：自動順延過期調機排程
-        async function autoRollForwardAdjustments() {
-            const todayStr = getToday();
-            let hasChanged = false;
-            
-            machines.forEach(m => {
-                ensureArrays(m);
-                m.nextAdj.forEach((adj, i) => {
-                    if (adj.date < todayStr) {
-                        let d = new Date(adj.date);
-                        let newDateStr = adj.date;
-                        
-                        // 一直 +1 天，直到 >= 今天，且不與其他排程衝突
-                        while (newDateStr < todayStr) {
-                            d.setDate(d.getDate() + 1);
-                            newDateStr = d.toISOString().split('T')[0];
-                        }
-                        
-                        // 檢查衝突 (如果順延到的那天已經有保養/清潔/其他調機，再繼續往後延)
-                        let hasConflict = true;
-                        while (hasConflict) {
-                            hasConflict = false;
-                            if (m.nextMaint.includes(newDateStr) || m.nextClean.includes(newDateStr) || m.nextAdj.some((a, idx) => idx !== i && a.date === newDateStr)) {
-                                hasConflict = true;
-                                d.setDate(d.getDate() + 1);
-                                newDateStr = d.toISOString().split('T')[0];
-                            }
-                        }
-                        
-                        adj.date = newDateStr;
-                        hasChanged = true;
-                    }
-                });
-            });
-            
-            if (hasChanged) {
-                await saveData();
-            }
-        }
-
         function populateGlobalTypeFilters() {
             const filters = ['maint-type-filter', 'clean-type-filter', 'adj-type-filter', 'filter-log-type', 'settings-machine-type-filter'];
             filters.forEach(id => {
@@ -910,7 +870,7 @@
         }
 
         // --- Navigation ---
-        async function switchTab(tabId) {
+        function switchTab(tabId) {
             document.querySelectorAll('main > div > div[id^="view-"]').forEach(el => el.classList.add('hidden'));
             document.getElementById(`view-${tabId}`).classList.remove('hidden');
             
@@ -928,10 +888,7 @@
             if(tabId === 'settings') renderSettings();
             if(tabId === 'maintenance') renderMaintenance();
             if(tabId === 'cleaning') renderCleaning();
-            if(tabId === 'adjustment') {
-                await autoRollForwardAdjustments(); // 切換到調機頁面時，自動檢查並順延
-                renderAdjustment();
-            }
+            if(tabId === 'adjustment') renderAdjustment(); // 移除自動順延的呼叫
             if(tabId === 'logs') {
                 populateGlobalTypeFilters();
                 renderLogs();
@@ -1304,7 +1261,14 @@
                 displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextClean.some(d => weekDays.includes(d)); });
             }
             if (renderType === 'adjust' && showOnlyPendingAdj) {
-                displayMachines = displayMachines.filter(m => { ensureArrays(m); return m.nextAdj.some(a => weekDays.includes(a.date)); });
+                const todayStr = getToday();
+                displayMachines = displayMachines.filter(m => { 
+                    ensureArrays(m); 
+                    return m.nextAdj.some(a => 
+                        weekDays.includes(a.date) || 
+                        (a.date < todayStr && weekDays.some(day => day >= a.date && day <= todayStr))
+                    ); 
+                });
             }
 
             const thead = document.getElementById(theadId);
@@ -1348,9 +1312,18 @@
                     
                     // 判斷當天是否有預排
                     let hasTask = false;
+                    let adjTask = null;
+                    const todayStr = getToday();
+
                     if (renderType === 'maintain') hasTask = m.nextMaint.includes(day);
                     else if (renderType === 'clean') hasTask = m.nextClean.includes(day);
-                    else if (renderType === 'adjust') hasTask = m.nextAdj.some(a => a.date === day);
+                    else if (renderType === 'adjust') {
+                        adjTask = m.nextAdj.find(a =>
+                            a.date === day ||
+                            (a.date < todayStr && day >= a.date && day <= todayStr)
+                        );
+                        hasTask = !!adjTask;
+                    }
 
                     if (hasTask) {
                         let styleCls, text, subText = '';
@@ -1362,13 +1335,18 @@
                             text = '清潔預排';
                         } else {
                             styleCls = 'bg-indigo-100 hover:bg-indigo-200 border-indigo-200 text-indigo-800';
-                            text = '調機預排';
-                            const adjData = m.nextAdj.find(a => a.date === day);
-                            if (adjData) {
-                                const sm = adjData.startModel || '?';
-                                const em = adjData.endModel || '?';
-                                subText = `<div class="text-xs font-normal mt-1 text-indigo-600">${sm} ➔ ${em}</div>`;
+                            
+                            // 判斷是開始日還是跨日進行中
+                            if (adjTask.date === day) {
+                                text = '調機預排';
+                            } else {
+                                text = '調機中';
+                                styleCls = 'bg-indigo-50 border-indigo-300 text-indigo-700 border-dashed hover:bg-indigo-100'; // 跨日進行中樣式
                             }
+
+                            const sm = adjTask.startModel || '?';
+                            const em = adjTask.endModel || '?';
+                            subText = `<div class="text-xs font-normal mt-1 ${adjTask.date === day ? 'text-indigo-600' : 'text-indigo-500'}">${sm} ➔ ${em}</div>`;
                         }
 
                         const cursorCls = isAdmin ? 'cursor-pointer hover:scale-105 shadow-sm' : 'opacity-80';
@@ -1736,9 +1714,23 @@
             const m = machines.find(mac => mac.id === machineId);
             if(!m) return;
 
+            let actualActionDate = date;
+
+            if (type === 'adjust') {
+                const todayStr = getToday();
+                // 找出點擊的那個格子對應的真正任務開始日
+                const adjTask = m.nextAdj.find(a =>
+                    a.date === date ||
+                    (a.date < todayStr && date >= a.date && date <= todayStr)
+                );
+                if (adjTask) {
+                    actualActionDate = adjTask.date;
+                }
+            }
+
             document.getElementById('action-machine-id').value = m.id;
             document.getElementById('action-type').value = type;
-            document.getElementById('action-date').value = date;
+            document.getElementById('action-date').value = actualActionDate; // 使用真正的開始日
             document.getElementById('action-machine-name').value = `${m.name} (${m.type})`;
             document.getElementById('action-notes').value = '';
 
@@ -1810,7 +1802,7 @@
         async function executeActionComplete() {
             const machineId = document.getElementById('action-machine-id').value;
             const type = document.getElementById('action-type').value;
-            const actionDate = document.getElementById('action-date').value;
+            const actionDate = document.getElementById('action-date').value; // 這裡是任務的開始日
             
             const date = document.getElementById('action-completion-date').value || getToday(); 
             const notes = document.getElementById('action-notes').value;
@@ -1823,7 +1815,7 @@
                 // 從排程中取得原本填寫的型號
                 const m = machines.find(mac => mac.id === machineId);
                 const adjData = m ? m.nextAdj.find(a => a.date === actionDate) : null;
-                logEntry.startDate = actionDate; // 預設開始日期為排程日
+                logEntry.startDate = actionDate; // 帶入真正的開始日
                 logEntry.startModel = adjData ? adjData.startModel : '';
                 logEntry.endModel = adjData ? adjData.endModel : '';
             }
@@ -2073,8 +2065,7 @@
         window.onload = async () => {
             if (SUPABASE_URL) await loadDataFromCloud();
             
-            // 初始化時也執行一次自動順延
-            await autoRollForwardAdjustments();
+            // 移除自動順延的呼叫，因為改為動態顯示
 
             const loadingOverlay = document.getElementById('loading-overlay');
             loadingOverlay.style.opacity = '0';
