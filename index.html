@@ -1017,18 +1017,19 @@
                 else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
                 else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
                 
-                // 調機檢查 (包含跨日進行中)
-                m.nextAdj.forEach(a => {
-                    if (a.date <= today) {
-                        if (!upcomingData.today.adj.includes(m)) upcomingData.today.adj.push(m);
-                    }
-                    if (a.date <= tomorrow) {
-                        if (!upcomingData.tomorrow.adj.includes(m)) upcomingData.tomorrow.adj.push(m);
-                    }
-                    if (a.date <= dayAfterTomorrow) {
-                        if (!upcomingData.dayAfter.adj.includes(m)) upcomingData.dayAfter.adj.push(m);
-                    }
-                });
+                // 調機檢查 (修正重複顯示邏輯)
+                // 今天：開始日 <= 今天 (包含跨日進行中)
+                if (m.nextAdj.some(a => a.date <= today)) {
+                    upcomingData.today.adj.push(m);
+                }
+                // 明天：開始日 == 明天 (只顯示明天才要開始的)
+                if (m.nextAdj.some(a => a.date === tomorrow)) {
+                    upcomingData.tomorrow.adj.push(m);
+                }
+                // 後天：開始日 == 後天 (只顯示後天才要開始的)
+                if (m.nextAdj.some(a => a.date === dayAfterTomorrow)) {
+                    upcomingData.dayAfter.adj.push(m);
+                }
             });
 
             let upcomingHTML = '';
