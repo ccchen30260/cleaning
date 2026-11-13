@@ -296,6 +296,7 @@
 
                     <div class="flex space-x-2 items-center flex-wrap gap-y-2">
                         <button onclick="togglePending('clean')" id="toggle-pending-clean" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-sm font-bold shadow-sm transition-colors mr-2">顯示待清潔</button>
+                        <button onclick="openFixedCleanModal()" class="admin-only hidden px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 text-sm font-bold shadow-sm transition-colors mr-2">一鍵排定固定清潔</button>
                         <button onclick="clearCurrentWeek('clean')" class="admin-only hidden px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-bold shadow-sm transition-colors mr-2">一鍵清除</button>
                         <button onclick="changeWeek('clean', -1)" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm">&lt; 上週</button>
                         <span id="clean-week-label" class="font-bold text-gray-700 px-2 text-sm md:text-base"></span>
@@ -426,6 +427,29 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Fixed Clean Schedule -->
+    <div id="fixed-clean-modal" class="fixed inset-0 bg-black/40 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800">排定固定清潔排程</h3>
+                <button onclick="closeFixedCleanModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <form onsubmit="submitFixedCleanSchedule(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">排程開始日期 <span class="text-red-500">*</span></label>
+                        <input type="date" id="fixed-clean-start-date" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <p class="text-xs text-gray-500 mt-2">系統將從此日期開始，自動排定未來 4 週的固定清潔排程。</p>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeFixedCleanModal()" class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium">取消</button>
+                        <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">確認排定</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -738,6 +762,15 @@
             ...['NO.28','NO.29','NO.30','NO.27','NO.32','NO.35','NO.36','NO.37','NO.42','NO.39','NO.40','NO.33','NO.34','NO.41'].map((n,i)=>({ id: generateId()+i+'z', type: '烘箱', name: n, nextMaint: [getOffsetDate(30)], nextClean: [getOffsetDate(7)], nextAdj: [], batchNo: '' })),
         ];
 
+        // 固定清潔排程對應表 (1: 週一, 2: 週二 ... 5: 週五)
+        const FIXED_CLEAN_MAPPING = {
+            1: ['W32', 'W33', 'W36', 'W42', 'W43', 'W44'], // 星期一
+            2: ['RW16', 'RW17', 'RW18', 'RW19'],           // 星期二
+            3: ['RW09', 'RW10', 'RW11', 'RW12'],           // 星期三
+            4: ['RW05', 'RW07', 'RW08', 'RW14'],           // 星期四
+            5: ['W34', 'W35', 'W37', 'W38', 'W39', 'W31', 'W40'] // 星期五
+        };
+
         // 確保所有機台資料的排程都是「多日期陣列」格式 (強制防呆處理)
         function normalizeMachines(macs) {
             return macs.map(m => {
@@ -888,10 +921,70 @@
             if(tabId === 'settings') renderSettings();
             if(tabId === 'maintenance') renderMaintenance();
             if(tabId === 'cleaning') renderCleaning();
-            if(tabId === 'adjustment') renderAdjustment(); // 移除自動順延的呼叫
+            if(tabId === 'adjustment') renderAdjustment();
             if(tabId === 'logs') {
                 populateGlobalTypeFilters();
                 renderLogs();
+            }
+        }
+
+        // --- 功能: 一鍵排定固定清潔 ---
+        function openFixedCleanModal() {
+            // 預設為「下週一」
+            const today = new Date();
+            const day = today.getDay();
+            const diff = today.getDate() + (day === 0 ? 1 : 8 - day);
+            const nextMonday = new Date(today.setDate(diff));
+            document.getElementById('fixed-clean-start-date').value = nextMonday.toISOString().split('T')[0];
+            
+            document.getElementById('fixed-clean-modal').classList.remove('hidden');
+        }
+
+        function closeFixedCleanModal() {
+            document.getElementById('fixed-clean-modal').classList.add('hidden');
+        }
+
+        async function submitFixedCleanSchedule(e) {
+            e.preventDefault();
+            const startDateStr = document.getElementById('fixed-clean-start-date').value;
+            if (!startDateStr) return;
+
+            let addedCount = 0;
+            const processedWeeks = 4; // 預設排定未來 4 週
+
+            // 將開始日期轉為 Date 物件
+            const startDate = new Date(startDateStr);
+
+            // 迴圈跑 28 天 (4 週)
+            for (let i = 0; i < processedWeeks * 7; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                
+                const dayOfWeek = currentDate.getDay(); // 0: 日, 1: 一, ..., 6: 六
+                const dateStr = currentDate.toISOString().split('T')[0];
+
+                // 檢查該天是否有對應的機台清單
+                if (FIXED_CLEAN_MAPPING[dayOfWeek]) {
+                    const machineNames = FIXED_CLEAN_MAPPING[dayOfWeek];
+                    machineNames.forEach(name => {
+                        const machine = machines.find(m => m.name === name);
+                        if (machine) {
+                            if (!machine.nextClean.includes(dateStr)) {
+                                machine.nextClean.push(dateStr);
+                                addedCount++;
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (addedCount > 0) {
+                await saveData();
+                closeFixedCleanModal();
+                renderCleaning();
+                showToast(`已成功新增 ${addedCount} 筆固定清潔排程`);
+            } else {
+                showToast('指定期間內沒有新增任何排程 (可能已存在)', 'error');
             }
         }
 
@@ -906,7 +999,7 @@
                 ensureArrays(m);
                 if (m.nextMaint.some(d => d <= today)) urgentMaint++;
                 if (m.nextClean.some(d => d <= today)) urgentClean++;
-                if (m.nextAdj.some(a => a.date <= today)) urgentAdj++; // 調機只要開始日 <= 今天，都算逾期/進行中
+                if (m.nextAdj.some(a => a.date <= today)) urgentAdj++;
             });
 
             document.getElementById('stat-urgent-maint').textContent = urgentMaint;
