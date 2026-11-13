@@ -738,13 +738,27 @@
         // ==========================================
         // --- Utility Functions ---
         // ==========================================
-        function generateId() { return 'id-' + Date.now().toString(36) + Math.random().toString(36).substring(2); }
-        function getToday() { return new Date().toISOString().split('T')[0]; }
+        // 取得本地時間的今天 (YYYY-MM-DD)
+        function getToday() {
+            const d = new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        
+        // 取得本地時間的偏移日期 (YYYY-MM-DD)
         function getOffsetDate(days) {
             const d = new Date();
             d.setDate(d.getDate() + days);
-            return d.toISOString().split('T')[0];
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
+
+        function generateId() { return 'id-' + Date.now().toString(36) + Math.random().toString(36).substring(2); }
+        
         function getMonday(d) {
             const date = new Date(d);
             const day = date.getDay();
@@ -756,7 +770,10 @@
             for (let i = 0; i < 7; i++) {
                 let d = new Date(startMonday);
                 d.setDate(d.getDate() + i);
-                days.push(d.toISOString().split('T')[0]);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                days.push(`${year}-${month}-${day}`);
             }
             return days;
         }
@@ -959,7 +976,11 @@
             const day = today.getDay();
             const diff = today.getDate() + (day === 0 ? 1 : 8 - day);
             const nextMonday = new Date(today.setDate(diff));
-            document.getElementById('fixed-clean-start-date').value = nextMonday.toISOString().split('T')[0];
+            
+            const year = nextMonday.getFullYear();
+            const month = String(nextMonday.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(nextMonday.getDate()).padStart(2, '0');
+            document.getElementById('fixed-clean-start-date').value = `${year}-${month}-${dayStr}`;
             
             // 填入預設機台清單
             document.getElementById('fixed-clean-mon').value = DEFAULT_FIXED_CLEAN.mon.join(', ');
@@ -996,6 +1017,7 @@
             };
 
             let addedCount = 0;
+            let skippedCount = 0;
             const processedWeeks = 4; // 預設排定未來 4 週
 
             // 將開始日期轉為 Date 物件
@@ -1006,8 +1028,12 @@
                 const currentDate = new Date(startDate);
                 currentDate.setDate(startDate.getDate() + i);
                 
+                const year = currentDate.getFullYear();
+                const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                const day = String(currentDate.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+                
                 const dayOfWeek = currentDate.getDay(); // 0: 日, 1: 一, ..., 6: 六
-                const dateStr = currentDate.toISOString().split('T')[0];
 
                 // 檢查該天是否有對應的機台清單
                 if (dynamicMapping[dayOfWeek]) {
@@ -1016,8 +1042,10 @@
                         const machine = machines.find(m => m.name === name);
                         if (machine) {
                             // 若當天已有保養或調機，則不排定清潔
-                            if (machine.nextMaint.includes(dateStr)) return;
-                            if (machine.nextAdj.some(a => a.date === dateStr)) return;
+                            if (machine.nextMaint.includes(dateStr) || machine.nextAdj.some(a => a.date === dateStr)) {
+                                skippedCount++;
+                                return;
+                            }
 
                             // 檢查是否已存在清潔，若無則新增
                             if (!machine.nextClean.includes(dateStr)) {
@@ -1029,11 +1057,15 @@
                 }
             }
 
-            if (addedCount > 0) {
+            if (addedCount > 0 || skippedCount > 0) {
                 await saveData();
                 closeFixedCleanModal();
                 renderCleaning();
-                showToast(`已成功新增 ${addedCount} 筆固定清潔排程 (已自動避開保養)`);
+                if (skippedCount > 0) {
+                    showToast(`成功新增 ${addedCount} 筆，已跳過 ${skippedCount} 筆與保養/調機衝突的排程`, 'success');
+                } else {
+                    showToast(`已成功新增 ${addedCount} 筆固定清潔排程`);
+                }
             } else {
                 showToast('指定期間內沒有新增任何排程 (可能已存在或機台名稱有誤)', 'error');
             }
@@ -1161,16 +1193,13 @@
                 else if (m.nextClean.includes(tomorrow)) upcomingData.tomorrow.clean.push(m);
                 else if (m.nextClean.includes(dayAfterTomorrow)) upcomingData.dayAfter.clean.push(m);
                 
-                // 調機檢查 (修正重複顯示邏輯)
-                // 今天：開始日 <= 今天 (包含跨日進行中)
+                // 調機檢查
                 if (m.nextAdj.some(a => a.date <= today)) {
                     upcomingData.today.adj.push(m);
                 }
-                // 明天：開始日 == 明天 (只顯示明天才要開始的)
                 if (m.nextAdj.some(a => a.date === tomorrow)) {
                     upcomingData.tomorrow.adj.push(m);
                 }
-                // 後天：開始日 == 後天 (只顯示後天才要開始的)
                 if (m.nextAdj.some(a => a.date === dayAfterTomorrow)) {
                     upcomingData.dayAfter.adj.push(m);
                 }
