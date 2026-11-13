@@ -866,6 +866,19 @@
         // 匯出用暫存資料
         let currentFilteredLogs = []; 
 
+        // 全域衝突排解：只要同一天有保養或調機，就強制拔除清潔
+        function resolveConflicts() {
+            machines.forEach(m => {
+                ensureArrays(m);
+                if (m.nextMaint.length > 0 || m.nextAdj.length > 0) {
+                    const adjDates = m.nextAdj.map(a => a.date);
+                    m.nextClean = m.nextClean.filter(cleanDate => {
+                        return !m.nextMaint.includes(cleanDate) && !adjDates.includes(cleanDate);
+                    });
+                }
+            });
+        }
+
         // 雲端資料庫載入
         async function loadDataFromCloud() {
             if (supabaseClient) {
@@ -904,7 +917,8 @@
                 sysPwds = { admin: '0000', viewer: '0000' };
             }
             
-            // 存檔前再次全體陣列防護
+            // 存檔前進行衝突排解與陣列防護
+            resolveConflicts();
             machines = normalizeMachines(machines);
 
             localStorage.setItem('sys_types', JSON.stringify(machineTypes));
@@ -1502,7 +1516,13 @@
                     const todayStr = getToday();
 
                     if (renderType === 'maintain') hasTask = m.nextMaint.includes(day);
-                    else if (renderType === 'clean') hasTask = m.nextClean.includes(day);
+                    else if (renderType === 'clean') {
+                        hasTask = m.nextClean.includes(day);
+                        // 如果該天同時有保養或調機，強制不顯示清潔 (雙重防呆)
+                        if (m.nextMaint.includes(day) || m.nextAdj.some(a => a.date === day)) {
+                            hasTask = false;
+                        }
+                    }
                     else if (renderType === 'adjust') {
                         adjTask = m.nextAdj.find(a =>
                             a.date === day ||
@@ -2270,7 +2290,8 @@
         window.onload = async () => {
             if (SUPABASE_URL) await loadDataFromCloud();
             
-            // 移除自動順延的呼叫，因為改為動態顯示
+            // 初始化時進行一次衝突排解
+            resolveConflicts();
 
             const loadingOverlay = document.getElementById('loading-overlay');
             loadingOverlay.style.opacity = '0';
