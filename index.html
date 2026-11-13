@@ -443,7 +443,7 @@
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-2">排程開始日期 <span class="text-red-500">*</span></label>
                         <input type="date" id="fixed-clean-start-date" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
-                        <p class="text-xs text-gray-500 mt-2">系統將從此日期開始，自動排定未來 4 週的固定清潔排程。</p>
+                        <p class="text-xs text-gray-500 mt-2">系統將從此日期開始，自動排定未來 4 週的固定清潔排程。<br>(如遇當天已有保養或調機排程，將自動跳過)</p>
                     </div>
                     
                     <div class="space-y-3 mb-6">
@@ -945,7 +945,7 @@
             if(tabId === 'settings') renderSettings();
             if(tabId === 'maintenance') renderMaintenance();
             if(tabId === 'cleaning') renderCleaning();
-            if(tabId === 'adjustment') renderAdjustment(); // 移除自動順延的呼叫
+            if(tabId === 'adjustment') renderAdjustment();
             if(tabId === 'logs') {
                 populateGlobalTypeFilters();
                 renderLogs();
@@ -1015,6 +1015,11 @@
                     machineNames.forEach(name => {
                         const machine = machines.find(m => m.name === name);
                         if (machine) {
+                            // 若當天已有保養或調機，則不排定清潔
+                            if (machine.nextMaint.includes(dateStr)) return;
+                            if (machine.nextAdj.some(a => a.date === dateStr)) return;
+
+                            // 檢查是否已存在清潔，若無則新增
                             if (!machine.nextClean.includes(dateStr)) {
                                 machine.nextClean.push(dateStr);
                                 addedCount++;
@@ -1028,7 +1033,7 @@
                 await saveData();
                 closeFixedCleanModal();
                 renderCleaning();
-                showToast(`已成功新增 ${addedCount} 筆固定清潔排程`);
+                showToast(`已成功新增 ${addedCount} 筆固定清潔排程 (已自動避開保養)`);
             } else {
                 showToast('指定期間內沒有新增任何排程 (可能已存在或機台名稱有誤)', 'error');
             }
@@ -2062,20 +2067,39 @@
                 const d = rescheduleTarget.date;
                 const adjDates = m.nextAdj.map(a => a.date);
                 
-                if ((isMaintain && (m.nextClean.includes(d) || adjDates.includes(d))) ||
-                    (isClean && (m.nextMaint.includes(d) || adjDates.includes(d))) ||
-                    (isAdj && (m.nextMaint.includes(d) || m.nextClean.includes(d)))) {
-                    showToast('衝突錯誤：同一天不可同時安排多種排程！', 'error');
-                    closeRescheduleModal();
-                    return;
-                }
-
-                // 新增日期至排程陣列
                 if (isMaintain) {
+                    // 若當天已有清潔排程，自動取消清潔
+                    let autoRemovedClean = false;
+                    if (m.nextClean.includes(d)) {
+                        m.nextClean = m.nextClean.filter(date => date !== d);
+                        autoRemovedClean = true;
+                    }
+
+                    // 調機衝突依然阻擋
+                    if (adjDates.includes(d)) {
+                        showToast('衝突錯誤：同一天不可同時安排保養與調機！', 'error');
+                        closeRescheduleModal();
+                        return;
+                    }
+
                     if (!m.nextMaint.includes(d)) m.nextMaint.push(d);
+                    
+                    if (autoRemovedClean) {
+                        showToast(`已排定保養，並自動取消當天清潔`, 'success');
+                    }
                 } else if (isClean) {
+                    if (m.nextMaint.includes(d) || adjDates.includes(d)) {
+                        showToast('衝突錯誤：同一天已有保養或調機排程！', 'error');
+                        closeRescheduleModal();
+                        return;
+                    }
                     if (!m.nextClean.includes(d)) m.nextClean.push(d);
-                } else {
+                } else if (isAdj) {
+                    if (m.nextMaint.includes(d) || m.nextClean.includes(d)) {
+                        showToast('衝突錯誤：同一天不可同時安排多種排程！', 'error');
+                        closeRescheduleModal();
+                        return;
+                    }
                     if (!adjDates.includes(d)) {
                         const sm = document.getElementById('reschedule-start-model').value.trim();
                         const em = document.getElementById('reschedule-end-model').value.trim();
