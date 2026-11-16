@@ -1645,8 +1645,13 @@
             const actionFilter = actionFilterEl.value;
             const timeMode = timeModeEl.value;
             
-            // 過濾作業類型 (因為移除了「所有作業」，現在只會是 maintain / clean / adjust 其中一種)
-            let filtered = logs.filter(l => l.type === actionFilter);
+            // 修改過濾邏輯：如果是查詢「清潔」，同時包含「保養」
+            let filtered = logs.filter(l => {
+                if (actionFilter === 'clean') {
+                    return l.type === 'clean' || l.type === 'maintain';
+                }
+                return l.type === actionFilter;
+            });
             
             if (machineFilter !== 'all') {
                 filtered = filtered.filter(l => l.machineId === machineFilter);
@@ -1703,11 +1708,6 @@
                 const mName = m ? m.name : "已刪除機台";
                 const mType = m ? m.type : "-";
                 
-                let typeLabel = '';
-                if (l.type === 'maintain') typeLabel = '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>';
-                else if (l.type === 'clean') typeLabel = '<span class="text-teal-600 bg-teal-50 px-2 py-1 rounded font-medium">清潔</span>';
-                else if (l.type === 'adjust') typeLabel = '<span class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded font-medium">調機</span>';
-                
                 let actionCol = '';
                 if (isAdmin) {
                     actionCol = `
@@ -1719,8 +1719,8 @@
 
                 let rowHTML = `<tr class="hover:bg-gray-50">`;
                 
-                // 根據不同類型，產生對應順序的欄位內容
                 if (actionFilter === 'maintain') {
+                    const typeLabel = '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>';
                     rowHTML += `
                         <td class="px-6 py-4">${l.date}</td>
                         <td class="px-6 py-4 text-gray-500">${mType}</td>
@@ -1729,16 +1729,32 @@
                         <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
                     `;
                 } else if (actionFilter === 'clean') {
-                    const batchHtml = l.batchNo ? `<span class="font-mono text-sm">${l.batchNo}</span>` : '-';
+                    // 特殊處理：清潔查詢包含保養
+                    let typeLabel = '';
+                    let batchHtml = '-';
+                    let notesHtml = '-';
+
+                    if (l.type === 'clean') {
+                        typeLabel = '<span class="text-teal-600 bg-teal-50 px-2 py-1 rounded font-medium">清潔</span>';
+                        batchHtml = l.batchNo ? `<span class="font-mono text-sm">${l.batchNo}</span>` : '-';
+                        notesHtml = l.notes || '-';
+                    } else if (l.type === 'maintain') {
+                        typeLabel = '<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded font-medium">保養</span>';
+                        // 保養紀錄沒有批號欄位，將備註作為批號顯示
+                        batchHtml = l.notes ? `<span class="font-mono text-sm">${l.notes}</span>` : '-';
+                        notesHtml = '-'; // 備註已挪至批號欄
+                    }
+
                     rowHTML += `
                         <td class="px-6 py-4">${l.date}</td>
                         <td class="px-6 py-4 text-gray-500">${mType}</td>
                         <td class="px-6 py-4 font-bold text-gray-800">${mName}</td>
                         <td class="px-6 py-4">${typeLabel}</td>
                         <td class="px-6 py-4">${batchHtml}</td>
-                        <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${l.notes}">${l.notes || '-'}</td>
+                        <td class="px-6 py-4 text-gray-500 max-w-xs truncate" title="${notesHtml !== '-' ? notesHtml : ''}">${notesHtml}</td>
                     `;
                 } else if (actionFilter === 'adjust') {
+                    const typeLabel = '<span class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded font-medium">調機</span>';
                     const modelHtml = `${l.startModel || '-'} ➔ ${l.endModel || '-'}`;
                     rowHTML += `
                         <td class="px-6 py-4">${l.startDate || '-'}</td>
@@ -1771,11 +1787,14 @@
                 const mName = m ? m.name : '已刪除機台';
                 const mType = m ? m.type : '-';
                 
-                // 根據當下查詢的類別，產生完美對應的 Excel 欄位格式
                 if (actionFilter === 'maintain') {
                     return { '日期': l.date, '類型': mType, '機台': mName, '作業': '保養', '備註': l.notes || '' };
                 } else if (actionFilter === 'clean') {
-                    return { '日期': l.date, '類型': mType, '機台': mName, '作業': '清潔', '清潔後起始批號': l.batchNo || '', '備註': l.notes || '' };
+                    if (l.type === 'clean') {
+                        return { '日期': l.date, '類型': mType, '機台': mName, '作業': '清潔', '清潔後起始批號': l.batchNo || '', '備註': l.notes || '' };
+                    } else if (l.type === 'maintain') {
+                        return { '日期': l.date, '類型': mType, '機台': mName, '作業': '保養', '清潔後起始批號': l.notes || '', '備註': '' };
+                    }
                 } else {
                     return { '開始日期': l.startDate || '', '完成日期': l.date || '', '類型': mType, '機台': mName, '作業': '調機', '型號': `${l.startModel || ''}➔${l.endModel || ''}`, '備註': l.notes || '' };
                 }
