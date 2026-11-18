@@ -807,8 +807,8 @@
         const DEFAULT_FIXED_CLEAN = {
             mon: ['W32', 'W33', 'W36', 'W42', 'W43', 'W44'],
             tue: ['RW16', 'RW17', 'RW18', 'RW19'],
-            wed: ['RW09', 'RW10', 'RW11', 'RW12'],
-            thu: ['RW05', 'RW07', 'RW08', 'RW14'],
+            wed: ['RW07', 'RW08', 'RW11', 'RW12'],
+            thu: ['RW05', 'RW09', 'RW10', 'RW14'],
             fri: ['W34', 'W35', 'W37', 'W38', 'W39', 'W31', 'W40']
         };
 
@@ -996,12 +996,14 @@
             const dayStr = String(nextMonday.getDate()).padStart(2, '0');
             document.getElementById('fixed-clean-start-date').value = `${year}-${month}-${dayStr}`;
             
-            // 填入預設機台清單
-            document.getElementById('fixed-clean-mon').value = DEFAULT_FIXED_CLEAN.mon.join(', ');
-            document.getElementById('fixed-clean-tue').value = DEFAULT_FIXED_CLEAN.tue.join(', ');
-            document.getElementById('fixed-clean-wed').value = DEFAULT_FIXED_CLEAN.wed.join(', ');
-            document.getElementById('fixed-clean-thu').value = DEFAULT_FIXED_CLEAN.thu.join(', ');
-            document.getElementById('fixed-clean-fri').value = DEFAULT_FIXED_CLEAN.fri.join(', ');
+            // 讀取已儲存的設定，若無則使用預設
+            const savedConfig = JSON.parse(localStorage.getItem('sys_fixed_clean_config')) || DEFAULT_FIXED_CLEAN;
+            
+            document.getElementById('fixed-clean-mon').value = savedConfig.mon.join(', ');
+            document.getElementById('fixed-clean-tue').value = savedConfig.tue.join(', ');
+            document.getElementById('fixed-clean-wed').value = savedConfig.wed.join(', ');
+            document.getElementById('fixed-clean-thu').value = savedConfig.thu.join(', ');
+            document.getElementById('fixed-clean-fri').value = savedConfig.fri.join(', ');
             
             document.getElementById('fixed-clean-modal').classList.remove('hidden');
         }
@@ -1022,54 +1024,72 @@
                 return val.split(/[,，\n]+/).map(s => s.trim()).filter(s => s);
             };
 
-            const dynamicMapping = {
-                1: parseMachines('fixed-clean-mon'),
-                2: parseMachines('fixed-clean-tue'),
-                3: parseMachines('fixed-clean-wed'),
-                4: parseMachines('fixed-clean-thu'),
-                5: parseMachines('fixed-clean-fri')
+            const newConfig = {
+                mon: parseMachines('fixed-clean-mon'),
+                tue: parseMachines('fixed-clean-tue'),
+                wed: parseMachines('fixed-clean-wed'),
+                thu: parseMachines('fixed-clean-thu'),
+                fri: parseMachines('fixed-clean-fri')
             };
 
-            let addedCount = 0;
-            let skippedCount = 0;
-            const processedWeeks = 4; // 預設排定未來 4 週
+            // 儲存當下的設定
+            localStorage.setItem('sys_fixed_clean_config', JSON.stringify(newConfig));
 
-            // 將開始日期轉為 Date 物件
-            const startDate = new Date(startDateStr);
+            // 安全解析日期 (設定為中午避免跨時區)
+            const baseDate = new Date(startDateStr.replace(/-/g, '/'));
+            baseDate.setHours(12, 0, 0, 0);
 
-            // 迴圈跑 28 天 (4 週)
-            for (let i = 0; i < processedWeeks * 7; i++) {
-                const currentDate = new Date(startDate);
-                currentDate.setDate(startDate.getDate() + i);
-                
+            // 生成未來 28 天的精確日期與星期幾
+            const dates = [];
+            for (let i = 0; i < 28; i++) {
+                const currentDate = new Date(baseDate);
+                currentDate.setDate(baseDate.getDate() + i);
                 const year = currentDate.getFullYear();
                 const month = String(currentDate.getMonth() + 1).padStart(2, '0');
                 const day = String(currentDate.getDate()).padStart(2, '0');
-                const dateStr = `${year}-${month}-${day}`;
-                
-                const dayOfWeek = currentDate.getDay(); // 0: 日, 1: 一, ..., 6: 六
+                dates.push({
+                    dateStr: `${year}-${month}-${day}`,
+                    dayOfWeek: currentDate.getDay() // 0: 日, 1: 一, ..., 6: 六
+                });
+            }
 
-                // 檢查該天是否有對應的機台清單
-                if (dynamicMapping[dayOfWeek]) {
-                    const machineNames = dynamicMapping[dayOfWeek];
+            const dayMap = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri' };
+
+            // 收集所有要排程的目標機台，用以先清除它們在該區間的舊排程（防止重複與錯亂）
+            const targetMachineNames = new Set();
+            Object.values(newConfig).forEach(arr => arr.forEach(name => targetMachineNames.add(name)));
+
+            // 清除目標機台在 28 天內的舊清潔排程
+            machines.forEach(m => {
+                if (targetMachineNames.has(m.name)) {
+                    const dateRange = dates.map(d => d.dateStr);
+                    m.nextClean = m.nextClean.filter(d => !dateRange.includes(d));
+                }
+            });
+
+            let addedCount = 0;
+            let skippedCount = 0;
+
+            // 根據設定的星期幾，精準排入對應機台
+            dates.forEach(item => {
+                const dayKey = dayMap[item.dayOfWeek];
+                if (dayKey && newConfig[dayKey]) {
+                    const machineNames = newConfig[dayKey];
                     machineNames.forEach(name => {
                         const machine = machines.find(m => m.name === name);
                         if (machine) {
                             // 若當天已有保養或調機，則不排定清潔
-                            if (machine.nextMaint.includes(dateStr) || machine.nextAdj.some(a => a.date === dateStr)) {
+                            if (machine.nextMaint.includes(item.dateStr) || machine.nextAdj.some(a => a.date === item.dateStr)) {
                                 skippedCount++;
                                 return;
                             }
-
-                            // 檢查是否已存在清潔，若無則新增
-                            if (!machine.nextClean.includes(dateStr)) {
-                                machine.nextClean.push(dateStr);
-                                addedCount++;
-                            }
+                            
+                            machine.nextClean.push(item.dateStr);
+                            addedCount++;
                         }
                     });
                 }
-            }
+            });
 
             if (addedCount > 0 || skippedCount > 0) {
                 await saveData();
@@ -1645,7 +1665,7 @@
             const actionFilter = actionFilterEl.value;
             const timeMode = timeModeEl.value;
             
-            // 修改過濾邏輯：如果是查詢「清潔」，同時包含「保養」
+            // 過濾邏輯：如果是查詢「清潔」，同時包含「保養」
             let filtered = logs.filter(l => {
                 if (actionFilter === 'clean') {
                     return l.type === 'clean' || l.type === 'maintain';
